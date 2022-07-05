@@ -1,0 +1,7 @@
+.pio
+.clang_complete
+.gcc-flags.json
+.ccls
+.core_dir
+.*.sw*
+src/generated

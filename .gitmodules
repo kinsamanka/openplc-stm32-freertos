@@ -1,0 +1,12 @@
+[submodule "lib/uip"]
+	path = lib/uip
+	url = https://github.com/kinsamanka/uip.git
+[submodule "lib/modbus"]
+	path = lib/modbus
+	url = https://github.com/Jacajack/liblightmodbus.git
+[submodule "lib/freertos"]
+	path = lib/freertos
+	url = https://github.com/FreeRTOS/FreeRTOS-Kernel.git
+[submodule "lib/matiec"]
+	path = lib/matiec
+	url = https://github.com/kinsamanka/matiec.git
