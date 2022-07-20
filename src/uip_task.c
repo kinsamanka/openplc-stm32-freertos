@@ -49,10 +49,10 @@ void uip_task(void *params)
                configNET_MASK3);
     uip_setnetmask(ipaddr);
 
-    modbus_init(mutex);
+    modbus_tcp_init(mutex);
 
     int i;
-    while (1) {
+    for (;;) {
         uip_len = tapdev_read();
         if (uip_len > 0) {
             if (BUF->type == htons(UIP_ETHTYPE_IP)) {

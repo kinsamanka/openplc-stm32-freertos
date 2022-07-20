@@ -38,3 +38,16 @@ void update_ouputs(void)
     SET_PIN(QX[3], GPIOB, GPIO10);
     SET_PIN(QX[4], GPIOB, GPIO11);
 }
+
+void hw_io_setup(void)
+{
+    /* Q0.0-Q0.4 */
+    gpio_set_mode(GPIOB, GPIO_MODE_OUTPUT_2_MHZ,
+                  GPIO_CNF_OUTPUT_PUSHPULL,
+                  GPIO5 | GPIO6 | GPIO7 | GPIO10 | GPIO11);
+
+    /* I0.0-I0.4 */
+    gpio_set_mode(GPIOB, GPIO_MODE_INPUT, GPIO_CNF_INPUT_FLOAT,
+                  GPIO1 | GPIO12 | GPIO13 | GPIO14 | GPIO15);
+
+}

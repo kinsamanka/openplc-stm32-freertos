@@ -29,6 +29,14 @@
 #define SLAVE_ADDRESS           1
 #endif
 
+#ifndef SLAVE_BAUD_RATE
+#define SLAVE_BAUD_RATE         19200
+#endif
+
+#ifndef SLAVE_PARITY
+#define SLAVE_PARITY            USART_PARITY_EVEN
+#endif
+
 #define configMODBUS_PORT       502
 
 /* MAC address configuration. */

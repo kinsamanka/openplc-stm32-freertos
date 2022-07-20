@@ -8,10 +8,13 @@
 #include <libopencm3/cm3/systick.h>
 
 #include "config.h"
+#include "hw.h"
 #include "uip_task.h"
+#include "uart1_task.h"
 #include "plc_task.h"
 
 uint8_t uip_notify_flag = 0;
+
 static SemaphoreHandle_t mutex = NULL;
 
 /******************************************************************************/
@@ -66,14 +69,11 @@ static void spi_setup(void)
 
 static void gpio_setup(void)
 {
-    /* Q0.0-Q0.4, W5500 PWR */
-    gpio_set_mode(GPIOB, GPIO_MODE_OUTPUT_2_MHZ,
-                  GPIO_CNF_OUTPUT_PUSHPULL,
-                  GPIO5 | GPIO6 | GPIO7 | GPIO10 | GPIO11 | GPIO9);
+    hw_io_setup();
 
-    /* I0.0-I0.4 */
-    gpio_set_mode(GPIOB, GPIO_MODE_INPUT, GPIO_CNF_INPUT_FLOAT,
-                  GPIO1 | GPIO12 | GPIO13 | GPIO14 | GPIO15);
+    /* W5500 PWR */
+    gpio_set_mode(GPIOB, GPIO_MODE_OUTPUT_2_MHZ,
+                  GPIO_CNF_OUTPUT_PUSHPULL, GPIO9);
 
     /* W5500 interrupt pin */
     gpio_set_mode(GPIOB, GPIO_MODE_INPUT, GPIO_CNF_INPUT_FLOAT, GPIO0);
@@ -130,6 +130,7 @@ int main(void)
     clock_setup();
     gpio_setup();
     spi_setup();
+    uart1_setup();
 
     mutex = xSemaphoreCreateMutex();
 
@@ -138,6 +139,10 @@ int main(void)
 
     xTaskCreate(uip_task, "uIP", configMINIMAL_STACK_SIZE * 4, &mutex,
                 tskIDLE_PRIORITY + 1, &uip_notify);
+
+    /* uart rx irq needs higher priority */
+    xTaskCreate(uart1_task, "uart1", configMINIMAL_STACK_SIZE * 2, &mutex,
+                tskIDLE_PRIORITY + 2, NULL);
 
     /* PLC task has a higher priority */
     xTaskCreate(plc_task, "PLC", configMINIMAL_STACK_SIZE * 4, &mutex,

@@ -1,14 +1,7 @@
 #ifndef MODBUS_TCP_H
 #define MODBUS_TCP_H
 
-#include <FreeRTOS.h>
-#include <semphr.h>
-
-#define LIGHTMODBUS_SLAVE_FULL
-#include <lightmodbus/lightmodbus.h>
-
-#include "config.h"
-
+#include "modbus_slave.h"
 #include "uipopt.h"
 
 typedef struct modbus_tcp_state {
@@ -22,6 +15,6 @@ void modbus_tcp_appcall(void);
 #define UIP_APPCALL modbus_tcp_appcall
 #endif
 
-void modbus_init(SemaphoreHandle_t *);
+void modbus_tcp_init(SemaphoreHandle_t *);
 
 #endif
