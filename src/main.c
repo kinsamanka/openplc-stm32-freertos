@@ -127,6 +127,8 @@ void vApplicationTickHook(void)
 
 int main(void)
 {
+    check_bootloader();
+
     clock_setup();
     gpio_setup();
     spi_setup();
@@ -145,7 +147,7 @@ int main(void)
                 tskIDLE_PRIORITY + 2, NULL);
 
     /* PLC task has a higher priority */
-    xTaskCreate(plc_task, "PLC", configMINIMAL_STACK_SIZE * 4, &mutex,
+    xTaskCreate(plc_task, "PLC", configMINIMAL_STACK_SIZE * 8, &mutex,
                 tskIDLE_PRIORITY + 2, NULL);
 
     vTaskStartScheduler();

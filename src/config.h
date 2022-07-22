@@ -59,4 +59,9 @@
 #define configNET_MASK2         255
 #define configNET_MASK3         0
 
+/* Start of bootloader region */
+#ifndef BOOTLOADER_ADDR
+#define BOOTLOADER_ADDR         0x1FFFF000UL
+#endif
+
 #endif

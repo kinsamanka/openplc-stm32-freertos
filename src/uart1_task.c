@@ -9,6 +9,7 @@
 
 #include <string.h>
 
+#include "hw.h"
 #include "uart1_task.h"
 
 static struct {
@@ -26,13 +27,16 @@ static QueueHandle_t u1rx_q, u1tx_q;
 
 void usart1_isr(void)
 {
-    char c;
+    uint16_t c;
+
     portBASE_TYPE y = pdFALSE;
 
     if (((USART_CR1(USART1) & USART_CR1_RXNEIE) != 0) &&
         ((USART_SR(USART1) & USART_SR_RXNE) != 0)) {
 
-        c = usart_recv(USART1);
+        c = (USART_SR(USART1) & USART_SR_FE) << 8;
+        c |= (0xff & usart_recv(USART1));
+
         xQueueSendFromISR(u1rx_q, &c, &y);
     }
 
@@ -68,14 +72,14 @@ void uart1_setup(void)
     USART_CR1(USART1) |= USART_CR1_RXNEIE;
 }
 
-static void uart_putc(char c)
+static void uart_putc(uint16_t c)
 {
     while (!xQueueSend(u1tx_q, &c, portMAX_DELAY)) ;
     /* Enable the TXE interrupt */
     USART_CR1(USART1) |= USART_CR1_TXEIE;
 }
 
-static int uart_getc(char *c, TickType_t wait)
+static int uart_getc(uint16_t *c, TickType_t wait)
 {
     return xQueueReceive(u1rx_q, c, wait);
 }
@@ -95,9 +99,9 @@ static void modbus_uart_init(SemaphoreHandle_t * mutex)
     modbusSlaveSetUserPointer(&rtu_slave, (void *)&context);
 }
 
-static void store_rx(char c)
+static void store_rx(uint16_t c)
 {
-    uart_buf.data[uart_buf.length++] = c;
+    uart_buf.data[uart_buf.length++] = (char) c;
 }
 
 static int handle_request(void)
@@ -142,10 +146,10 @@ static int handle_request(void)
 
 void uart1_task(void *params)
 {
-    char c;
+    uint16_t c;
     int p = uxTaskPriorityGet(NULL);
 
-    u1rx_q = xQueueCreate(1, sizeof(uint8_t));
+    u1rx_q = xQueueCreate(1, sizeof(uint16_t));
     u1tx_q = xQueueCreate(1, sizeof(uint8_t));
 
     SemaphoreHandle_t *mutex = (SemaphoreHandle_t *) params;
@@ -165,8 +169,34 @@ void uart1_task(void *params)
 
             uart_buf.length = 0;
             if (uart_getc(&c, WAIT_INFINITE)) {
-                store_rx(c);
-                state = STATE_RECEIVING;
+                if (c & 0xff00) {
+                    state = STATE_BREAK_1;
+                } else {
+                    store_rx(c);
+                    state = STATE_RECEIVING;
+                }
+            }
+            break;
+
+        case STATE_BREAK_1:
+            if (uart_getc(&c, WAIT_500_MS)) {
+                if (c & 0xff00)
+                    state = STATE_BREAK_2;
+                else
+                    state = STATE_INVALID;
+            } else {
+                state = STATE_INVALID;
+            }
+            break;
+
+        case STATE_BREAK_2:
+            if (uart_getc(&c, WAIT_500_MS)) {
+                if (c & 0xff00)
+                    run_bootloader();
+                else
+                    state = STATE_INVALID;
+            } else {
+                state = STATE_INVALID;
             }
             break;
 

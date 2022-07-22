@@ -11,6 +11,7 @@
 #endif
 
 #define WAIT_INFINITE   portMAX_DELAY
+#define WAIT_500_MS     (500 / portTICK_RATE_MS)
 
 #if (MAX_REQUEST > MAX_RESPONSE)
 #define UART_BUF_LEN    MAX_REQUEST
@@ -20,6 +21,8 @@
 
 enum task_state {
     STATE_IDLE,
+    STATE_BREAK_1,
+    STATE_BREAK_2,
     STATE_RECEIVING,
     STATE_TRANSMITTING,
     STATE_INVALID,
