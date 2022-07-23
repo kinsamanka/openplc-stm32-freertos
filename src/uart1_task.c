@@ -28,16 +28,20 @@ static QueueHandle_t u1rx_q, u1tx_q;
 void usart1_isr(void)
 {
     uint16_t c;
+    uint32_t r;
 
     portBASE_TYPE y = pdFALSE;
 
     if (((USART_CR1(USART1) & USART_CR1_RXNEIE) != 0) &&
-        ((USART_SR(USART1) & USART_SR_RXNE) != 0)) {
+        (((r = USART_SR(USART1)) & USART_SR_RXNE) != 0)) {
 
-        c = (USART_SR(USART1) & USART_SR_FE) << 8;
-        c |= (0xff & usart_recv(USART1));
+        c = 0xff & usart_recv(USART1);  /* strip parity */
+        if ((r & (USART_SR_FE | USART_SR_PE)) == 0) {
 
-        xQueueSendFromISR(u1rx_q, &c, &y);
+            /* accept if no frame or parity errors */
+            xQueueSendFromISR(u1rx_q, &c, &y);
+
+        }
     }
 
     if (((USART_CR1(USART1) & USART_CR1_TXEIE) != 0) &&
@@ -79,7 +83,7 @@ static void uart_putc(uint16_t c)
     USART_CR1(USART1) |= USART_CR1_TXEIE;
 }
 
-static int uart_getc(uint16_t *c, TickType_t wait)
+static int uart_getc(uint16_t * c, TickType_t wait)
 {
     return xQueueReceive(u1rx_q, c, wait);
 }
@@ -101,7 +105,7 @@ static void modbus_uart_init(SemaphoreHandle_t * mutex)
 
 static void store_rx(uint16_t c)
 {
-    uart_buf.data[uart_buf.length++] = (char) c;
+    uart_buf.data[uart_buf.length++] = (char)c;
 }
 
 static int handle_request(void)
@@ -168,40 +172,36 @@ void uart1_task(void *params)
             vTaskPrioritySet(NULL, p);
 
             uart_buf.length = 0;
-            if (uart_getc(&c, WAIT_INFINITE)) {
-                if (c & 0xff00) {
-                    state = STATE_BREAK_1;
-                } else {
-                    store_rx(c);
-                    state = STATE_RECEIVING;
-                }
-            }
-            break;
-
-        case STATE_BREAK_1:
-            if (uart_getc(&c, WAIT_500_MS)) {
-                if (c & 0xff00)
-                    state = STATE_BREAK_2;
+            if (uart_getc(&c, WAIT_INFINITE)) { /* no timeout */
+                if (c == 0xff)
+                    state = STATE_BOOTLOADER;
                 else
-                    state = STATE_INVALID;
-            } else {
-                state = STATE_INVALID;
+                    state = STATE_RECEIVING;
+
+                store_rx(c);
             }
             break;
 
-        case STATE_BREAK_2:
-            if (uart_getc(&c, WAIT_500_MS)) {
-                if (c & 0xff00)
+        case STATE_BOOTLOADER:
+            if (uart_getc(&c, WAIT_END_FRAME)) {        /* with timeout */
+                store_rx(c);
+                if (uart_buf.length > sizeof(BOOTLOADER_MAGIC) - 1)
+                    /* overflowed */
+                    state = STATE_INVALID;
+
+            } else {            /* done */
+
+                if (memcmp
+                    (uart_buf.data, BOOTLOADER_MAGIC,
+                     sizeof(BOOTLOADER_MAGIC) - 1) == 0)
                     run_bootloader();
                 else
                     state = STATE_INVALID;
-            } else {
-                state = STATE_INVALID;
             }
             break;
 
         case STATE_RECEIVING:
-            if (uart_getc(&c, WAIT_END_FRAME)) {        /* no timeout */
+            if (uart_getc(&c, WAIT_END_FRAME)) {        /* with timeout */
                 store_rx(c);
                 if (uart_buf.length > MAX_REQUEST)      /* overflowed */
                     state = STATE_INVALID;

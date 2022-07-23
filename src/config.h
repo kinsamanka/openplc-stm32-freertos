@@ -30,7 +30,7 @@
 #endif
 
 #ifndef SLAVE_BAUD_RATE
-#define SLAVE_BAUD_RATE         19200
+#define SLAVE_BAUD_RATE         57600
 #endif
 
 #ifndef SLAVE_PARITY
@@ -62,6 +62,10 @@
 /* Start of bootloader region */
 #ifndef BOOTLOADER_ADDR
 #define BOOTLOADER_ADDR         0x1FFFF000UL
+#endif
+
+#ifndef BOOTLOADER_MAGIC
+#define BOOTLOADER_MAGIC        ("\xff" "\xff" "BOOTLOADER" "\xff" "\xff")
 #endif
 
 #endif
