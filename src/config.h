@@ -61,7 +61,11 @@
 
 /* Start of bootloader region */
 #ifndef BOOTLOADER_ADDR
+#ifdef STM32F1
 #define BOOTLOADER_ADDR         0x1FFFF000UL
+#else
+#define BOOTLOADER_ADDR         0x1FFFEC00UL
+#endif
 #endif
 
 #ifndef BOOTLOADER_MAGIC

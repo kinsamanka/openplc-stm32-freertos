@@ -4,6 +4,23 @@ import platform
 
 Import("env")
 
+bc = env.BoardConfig()
+
+if "m3" in bc.get("build.cpu"):
+    core = 3
+else:
+    core = 0
+
+rom_size = f"{bc.get('upload.maximum_size') // 1024}K"
+ram_size = f"{bc.get('upload.maximum_ram_size') // 1024}K"
+
+env.Append(CCFLAGS=["-I", f"lib/freertos/portable/GCC/ARM_CM{core}",
+                    f"-DRAM_SIZE={bc.get('upload.maximum_ram_size')}",
+                    f"-DRAM_{ram_size}"])
+
+env.Append(LINKFLAGS=[f"-Wl,--defsym=__rom_size__={rom_size}",
+                      f"-Wl,--defsym=__ram_size__={ram_size}"])
+
 # mark these libs as system to ignore GCC warnings
 env.Append(CCFLAGS=["-isystem", "lib/uip/uip",
                     "-isystem", "lib/matiec/lib/C"])
@@ -21,7 +38,7 @@ def skip_from_build(node):
         return None
 
     # filter freertos src
-    keep = ["GCC/ARM_CM3/", "MemMang/heap_4"]
+    keep = [f"GCC/ARM_CM{core}/", "MemMang/heap_4"]
     if "freertos/portable" in n:
         if not any(s in n for s in keep):
             return None

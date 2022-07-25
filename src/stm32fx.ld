@@ -17,13 +17,15 @@
  * along with this library.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-/* Linker script for STM32F103x8, 64k flash, 20k RAM. */
+
+ROM_SIZE  = DEFINED(__rom_size__)  ? __rom_size__  : 4k;
+RAM_SIZE  = DEFINED(__ram_size__)  ? __ram_size__  : 4k;
 
 /* Define memory regions. */
 MEMORY
 {
-	rom (rx) : ORIGIN = 0x08000000, LENGTH = 64K
-	ram (rwx) : ORIGIN = 0x20000000, LENGTH = 20K
+	rom (rx) : ORIGIN = 0x08000000, LENGTH = ROM_SIZE
+	ram (rwx) : ORIGIN = 0x20000000, LENGTH = RAM_SIZE
 }
 
 /* Enforce emmition of the vector table. */
@@ -100,6 +102,7 @@ SECTIONS
 	.noinit : {
 		*(.noinit*)	/* Read-write persistent data */
 		. = ALIGN(4);
+        _enoinit = .;
 	} >ram
 
 	/*
@@ -113,4 +116,3 @@ SECTIONS
 }
 
 PROVIDE(_stack = ORIGIN(ram) + LENGTH(ram));
-

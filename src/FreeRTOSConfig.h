@@ -28,12 +28,18 @@
 #ifndef FREERTOS_CONFIG_H
 #define FREERTOS_CONFIG_H
 
-#define configCPU_CLOCK_HZ                      ( (unsigned long) 72000000 )
+#define configCPU_CLOCK_HZ                      ( (unsigned long) F_CPU )
 #define configSYSTICK_CLOCK_HZ                  ( configCPU_CLOCK_HZ / 8 )
 #define configTICK_RATE_HZ                      ( (TickType_t) 1000 )
 #define configMAX_PRIORITIES                    ( 5 )
-#define configMINIMAL_STACK_SIZE                ( (unsigned short) 128 )
-#define configTOTAL_HEAP_SIZE                   ( (size_t) (17 * 1024) )
+#define configMINIMAL_STACK_SIZE                ( (unsigned short) 32 )
+
+#if (RAM_SIZE > 8192)
+#define configTOTAL_HEAP_SIZE                   ( (size_t) (17.25 * 1024) )
+#else
+#define configTOTAL_HEAP_SIZE                   ( (size_t) (6.25 * 1024) )
+#endif
+
 #define configMAX_TASK_NAME_LEN                 ( 16 )
 #define configIDLE_SHOULD_YIELD                 0
 

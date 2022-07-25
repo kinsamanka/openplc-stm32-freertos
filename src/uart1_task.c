@@ -2,8 +2,13 @@
 #include <task.h>
 #include <queue.h>
 
-#include <libopencm3/stm32/usart.h>
 #include <libopencm3/cm3/nvic.h>
+#include <libopencm3/stm32/dma.h>
+#include <libopencm3/stm32/gpio.h>
+#ifdef STM32F0
+#include <libopencm3/stm32/syscfg.h>
+#endif
+#include <libopencm3/stm32/usart.h>
 
 #include <lightmodbus/lightmodbus.h>
 
@@ -11,6 +16,10 @@
 
 #include "hw.h"
 #include "uart1_task.h"
+
+#define IDLE_BIT                    0x01
+#define DMA_RX_TC_BIT               0x02
+#define DMA_TX_TC_BIT               0x04
 
 static struct {
     char data[UART_BUF_LEN];
@@ -23,69 +32,188 @@ static ModbusSlave rtu_slave;
 static uint8_t rtu_slave_buf[MAX_RESPONSE];
 static struct context context;
 
-static QueueHandle_t u1rx_q, u1tx_q;
+extern TaskHandle_t uart_notify;
+
+static volatile int skip_usart_idle = 0;
+
+#ifdef STM32F1
+void dma1_channel5_isr(void)
+#else
+void dma1_channel4_7_dma2_channel3_5_isr(void)
+#endif
+{
+    portBASE_TYPE y = pdFALSE;
+
+    if (dma_get_interrupt_flag(DMA1, DMA_CHANNEL5, DMA_TCIF)) {
+
+        dma_clear_interrupt_flags(DMA1, DMA_CHANNEL5, DMA_TCIF);
+
+        /* ignore the IDLE interrupt after DMA is done */
+        skip_usart_idle = 1;
+
+        xTaskNotifyFromISR(uart_notify, DMA_RX_TC_BIT, eSetBits, &y);
+    }
+#ifdef STM32F1
+    portYIELD_FROM_ISR(y);
+}
+
+void dma1_channel4_isr(void)
+{
+    portBASE_TYPE y = pdFALSE;
+#endif
+    if (dma_get_interrupt_flag(DMA1, DMA_CHANNEL4, DMA_TCIF)) {
+
+        dma_clear_interrupt_flags(DMA1, DMA_CHANNEL4, DMA_TCIF);
+
+        xTaskNotifyFromISR(uart_notify, DMA_TX_TC_BIT, eSetBits, &y);
+    }
+
+    portYIELD_FROM_ISR(y);
+}
+
+static void dma_setup(void)
+{
+#ifdef STM32F0
+    /* remap RX/TX DMA */
+    SYSCFG_CFGR1 |= SYSCFG_CFGR1_USART1_RX_DMA_RMP;
+    SYSCFG_CFGR1 |= SYSCFG_CFGR1_USART1_TX_DMA_RMP;
+#endif
+    /* USART RX DMA channel */
+    dma_channel_reset(DMA1, DMA_CHANNEL5);
+
+    dma_set_peripheral_address(DMA1, DMA_CHANNEL5, (uint32_t) & RX1_PERIF_ADDR);
+    dma_set_memory_address(DMA1, DMA_CHANNEL5, (uint32_t) uart_buf.data);
+    dma_set_number_of_data(DMA1, DMA_CHANNEL5, UART_BUF_LEN);
+    dma_set_read_from_peripheral(DMA1, DMA_CHANNEL5);
+    dma_enable_memory_increment_mode(DMA1, DMA_CHANNEL5);
+    dma_set_peripheral_size(DMA1, DMA_CHANNEL5, DMA_CCR_PSIZE_8BIT);
+    dma_set_memory_size(DMA1, DMA_CHANNEL5, DMA_CCR_MSIZE_8BIT);
+    dma_set_priority(DMA1, DMA_CHANNEL5, DMA_CCR_PL_HIGH);
+
+    dma_enable_transfer_complete_interrupt(DMA1, DMA_CHANNEL5);
+
+    /* USART TX DMA channel */
+    dma_channel_reset(DMA1, DMA_CHANNEL4);
+
+    dma_set_peripheral_address(DMA1, DMA_CHANNEL4, (uint32_t) & TX1_PERIF_ADDR);
+    dma_set_memory_address(DMA1, DMA_CHANNEL4, (uint32_t) uart_buf.data);
+    dma_set_number_of_data(DMA1, DMA_CHANNEL4, UART_BUF_LEN);
+    dma_set_read_from_memory(DMA1, DMA_CHANNEL4);
+    dma_enable_memory_increment_mode(DMA1, DMA_CHANNEL4);
+    dma_set_peripheral_size(DMA1, DMA_CHANNEL4, DMA_CCR_PSIZE_8BIT);
+    dma_set_memory_size(DMA1, DMA_CHANNEL4, DMA_CCR_MSIZE_8BIT);
+    dma_set_priority(DMA1, DMA_CHANNEL4, DMA_CCR_PL_HIGH);
+
+    dma_enable_transfer_complete_interrupt(DMA1, DMA_CHANNEL4);
+
+#ifdef STM32F1
+    nvic_enable_irq(NVIC_DMA1_CHANNEL4_IRQ);
+    nvic_enable_irq(NVIC_DMA1_CHANNEL5_IRQ);
+#else
+    nvic_enable_irq(NVIC_DMA1_CHANNEL4_7_DMA2_CHANNEL3_5_IRQ);
+#endif
+}
+
+static void disable_rx_dma(void)
+{
+    usart_disable_rx_dma(USART1);
+    dma_disable_channel(DMA1, DMA_CHANNEL5);
+}
+
+static void enable_rx_dma(void)
+{
+#ifdef STM32F1
+    /* clear errors */
+    (void)USART_SR(USART1);
+    (void)USART_DR(USART1);
+#else
+    /* clear errors */
+    USART_ICR(USART1) |= (USART_ICR_PECF | USART_ICR_FECF);
+
+    /* flush rx input */
+    (void)USART_RDR(USART1);
+#endif
+    dma_set_number_of_data(DMA1, DMA_CHANNEL5, UART_BUF_LEN);
+    dma_enable_channel(DMA1, DMA_CHANNEL5);
+    usart_enable_rx_dma(USART1);
+}
+
+static void disable_tx_dma(void)
+{
+    usart_disable_tx_dma(USART1);
+    dma_disable_channel(DMA1, DMA_CHANNEL4);
+}
+
+static void enable_tx_dma(int size)
+{
+    dma_set_number_of_data(DMA1, DMA_CHANNEL4, size);
+    dma_enable_channel(DMA1, DMA_CHANNEL4);
+    usart_enable_tx_dma(USART1);
+}
 
 void usart1_isr(void)
 {
-    uint16_t c;
-    uint32_t r;
-
     portBASE_TYPE y = pdFALSE;
 
-    if (((USART_CR1(USART1) & USART_CR1_RXNEIE) != 0) &&
-        (((r = USART_SR(USART1)) & USART_SR_RXNE) != 0)) {
+    if (usart_get_flag(USART1, USART_FLAG_IDLE) != 0) {
 
-        c = 0xff & usart_recv(USART1);  /* strip parity */
-        if ((r & (USART_SR_FE | USART_SR_PE)) == 0) {
-
-            /* accept if no frame or parity errors */
-            xQueueSendFromISR(u1rx_q, &c, &y);
-
-        }
+#ifdef STM32F1
+        (void)USART_DR(USART1); /* clear idle flag */
+#else
+        USART_ICR(USART1) |= USART_ICR_IDLECF;  /* clear interrupt */
+#endif
+        if (!skip_usart_idle)
+            xTaskNotifyFromISR(uart_notify, IDLE_BIT, eSetBits, &y);
+        else
+            skip_usart_idle = 0;
     }
 
-    if (((USART_CR1(USART1) & USART_CR1_TXEIE) != 0) &&
-        ((USART_SR(USART1) & USART_SR_TXE) != 0)) {
-
-        if (xQueueReceiveFromISR(u1tx_q, &c, &y)) {
-            usart_send(USART1, c);
-        } else {
-            /* Disable the TXE interrupt */
-            USART_CR1(USART1) &= ~USART_CR1_TXEIE;
-        }
-    }
     portYIELD_FROM_ISR(y);
+}
+
+static int usart_no_error(void)
+{
+    if ((usart_get_flag(USART1, USART_FLAG_PE) != 0) ||
+        (usart_get_flag(USART1, USART_FLAG_FE) != 0)) {
+
+        return 0;
+
+    } else {
+
+        return 1;
+
+    }
 }
 
 void uart1_setup(void)
 {
+#ifdef STM32F0
+    skip_usart_idle = 1;
+#endif
     if ((SLAVE_PARITY == USART_PARITY_EVEN)
         || (SLAVE_PARITY == USART_PARITY_ODD)) {
         usart_set_databits(USART1, 9);
         usart_set_stopbits(USART1, USART_STOPBITS_1);
     } else {
         usart_set_databits(USART1, 8);
-        usart_set_stopbits(USART1, USART_STOPBITS_2);
+        usart_set_stopbits(USART1, USART_STOPBITS_1);
     }
     usart_set_baudrate(USART1, SLAVE_BAUD_RATE);
     usart_set_mode(USART1, USART_MODE_TX_RX);
     usart_set_parity(USART1, SLAVE_PARITY);
     usart_set_flow_control(USART1, USART_FLOWCONTROL_NONE);
+#ifdef STM32F0
+    /* disable rx overrun */
+    USART_CR3(USART1) |= USART_CR3_OVRDIS;
+#endif
+    /* enable IDLE interrupt */
+    USART_CR1(USART1) |= USART_CR1_IDLEIE;
+
+    usart_enable(USART1);
 
     nvic_enable_irq(NVIC_USART1_IRQ);
-    USART_CR1(USART1) |= USART_CR1_RXNEIE;
-}
 
-static void uart_putc(uint16_t c)
-{
-    while (!xQueueSend(u1tx_q, &c, portMAX_DELAY)) ;
-    /* Enable the TXE interrupt */
-    USART_CR1(USART1) |= USART_CR1_TXEIE;
-}
-
-static int uart_getc(uint16_t * c, TickType_t wait)
-{
-    return xQueueReceive(u1rx_q, c, wait);
+    dma_setup();
 }
 
 static void modbus_uart_init(SemaphoreHandle_t * mutex)
@@ -101,11 +229,6 @@ static void modbus_uart_init(SemaphoreHandle_t * mutex)
                             modbusSlaveDefaultFunctionCount);
 
     modbusSlaveSetUserPointer(&rtu_slave, (void *)&context);
-}
-
-static void store_rx(uint16_t c)
-{
-    uart_buf.data[uart_buf.length++] = (char)c;
 }
 
 static int handle_request(void)
@@ -150,86 +273,46 @@ static int handle_request(void)
 
 void uart1_task(void *params)
 {
-    uint16_t c;
-    int p = uxTaskPriorityGet(NULL);
-
-    u1rx_q = xQueueCreate(1, sizeof(uint16_t));
-    u1tx_q = xQueueCreate(1, sizeof(uint8_t));
+    uint32_t state_bits;
+    int magic_len = sizeof(BOOTLOADER_MAGIC) - 1;
 
     SemaphoreHandle_t *mutex = (SemaphoreHandle_t *) params;
 
     modbus_uart_init(mutex);
 
-    enum task_state state = STATE_IDLE;
-
-    usart_enable(USART1);
+    enum task_state state = STATE_RX;
 
     for (;;) {
         switch (state) {
 
-        case STATE_IDLE:
-            /* set RX to higher priority and drop after receiving */
-            vTaskPrioritySet(NULL, p);
-
+        case STATE_RX:
             uart_buf.length = 0;
-            if (uart_getc(&c, WAIT_INFINITE)) { /* no timeout */
-                if (c == 0xff)
-                    state = STATE_BOOTLOADER;
-                else
-                    state = STATE_RECEIVING;
 
-                store_rx(c);
-            }
+            enable_rx_dma();
+            xTaskNotifyWait(0, 0xff, &state_bits, WAIT_INFINITE);
+            disable_rx_dma();
+
+            if (state_bits & (DMA_RX_TC_BIT | IDLE_BIT))
+                if (usart_no_error()) {
+                    uart_buf.length = DMA_RX_COUNT;
+                    state = STATE_TX;
+                }
             break;
 
-        case STATE_BOOTLOADER:
-            if (uart_getc(&c, WAIT_END_FRAME)) {        /* with timeout */
-                store_rx(c);
-                if (uart_buf.length > sizeof(BOOTLOADER_MAGIC) - 1)
-                    /* overflowed */
-                    state = STATE_INVALID;
-
-            } else {            /* done */
-
-                if (memcmp
-                    (uart_buf.data, BOOTLOADER_MAGIC,
-                     sizeof(BOOTLOADER_MAGIC) - 1) == 0)
+        case STATE_TX:
+            /* check for bootloader magic string */
+            if (uart_buf.length == magic_len)
+                if (memcmp(uart_buf.data, BOOTLOADER_MAGIC, magic_len) == 0)
                     run_bootloader();
-                else
-                    state = STATE_INVALID;
-            }
-            break;
 
-        case STATE_RECEIVING:
-            if (uart_getc(&c, WAIT_END_FRAME)) {        /* with timeout */
-                store_rx(c);
-                if (uart_buf.length > MAX_REQUEST)      /* overflowed */
-                    state = STATE_INVALID;
+            if (!handle_request())      /* handle modbus request */
+                state = STATE_RX;
 
-            } else {            /* done */
+            enable_tx_dma(uart_buf.length);
+            xTaskNotifyWait(0, 0xff, &state_bits, WAIT_INFINITE);
+            disable_tx_dma();
 
-                vTaskPrioritySet(NULL, p - 1);  /* drop priority */
-                c = handle_request();
-
-                if (c)
-                    state = STATE_TRANSMITTING;
-                else
-                    state = STATE_IDLE;
-            }
-            break;
-
-        case STATE_TRANSMITTING:
-            c = 0;
-            while (c < uart_buf.length)
-                uart_putc(uart_buf.data[c++]);
-
-            state = STATE_IDLE;
-            break;
-
-        case STATE_INVALID:
-            /* flush remaining rx */
-            while (uart_getc(&c, WAIT_END_FRAME)) ;
-            state = STATE_IDLE;
+            state = STATE_RX;
             break;
         }
     }
