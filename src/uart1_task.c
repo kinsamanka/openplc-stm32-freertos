@@ -187,9 +187,6 @@ static int usart_no_error(void)
 
 void uart1_setup(void)
 {
-#ifdef STM32F0
-    skip_usart_idle = 1;
-#endif
     if ((SLAVE_PARITY == USART_PARITY_EVEN)
         || (SLAVE_PARITY == USART_PARITY_ODD)) {
         usart_set_databits(USART1, 9);
@@ -293,7 +290,7 @@ void uart1_task(void *params)
             disable_rx_dma();
 
             if (state_bits & (DMA_RX_TC_BIT | IDLE_BIT))
-                if (usart_no_error()) {
+                if ((DMA_RX_COUNT > 0 ) && usart_no_error()) {
                     uart_buf.length = DMA_RX_COUNT;
                     state = STATE_TX;
                 }
