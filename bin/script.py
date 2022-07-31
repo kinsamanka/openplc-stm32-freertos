@@ -1,3 +1,4 @@
+from pathlib import PureWindowsPath
 from shutil import rmtree
 from subprocess import check_output
 import platform
@@ -31,6 +32,8 @@ env.Append(CFLAGS=["-Wimplicit-function-declaration",
 
 def skip_from_build(node):
     n = node.get_path()
+    if platform.system() == "Windows":
+        n = PureWindowsPath(n).as_posix()
 
     # filter UIP src and matiec dir
     skip = ["uip/apps", "uip/unix", "uip/doc", "lib/matiec"]
