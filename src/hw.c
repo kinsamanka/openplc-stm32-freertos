@@ -1,11 +1,11 @@
 #include "config.h"
 #include "hw.h"
 
+#include <libopencm3/cm3/scb.h>
 #include <libopencm3/stm32/gpio.h>
 #include <libopencm3/stm32/rcc.h>
 #include <libopencm3/stm32/usart.h>
 #include <libopencm3/stm32/spi.h>
-#include <libopencmsis/core_cm3.h>
 
 #define SET_PIN(a, b, c) \
     do { \
@@ -182,38 +182,11 @@ static void disable_output(void)
     SET_PIN(0, GPIOB, GPIO11);
 }
 
-static void reboot(void)
-{
-    /* reboot */
-    SCB_AIRCR = (0x5FA << 16) | SCB_AIRCR_SYSRESETREQ;
-    for (;;) ;
-}
-
 void run_bootloader(void)
 {
     disable_output();
     bootflag = 0xDEADBEEF;      /* set flag */
 
-    reboot();
+    scb_reset_system();
 }
 
-void check_boot_flag(void)
-{
-    uint32_t dfu_reset_addr = *(uint32_t *) (BOOT_ADDR + 4);
-    void (*dfu_bootloader)(void) =(void(*))(dfu_reset_addr);
-
-    if (bootflag == 0xDEADBEEF) {
-
-        bootflag = 0xBEEFDEAD;
-        dfu_bootloader();
-
-    } else if (bootflag == 0xBEEFDEAD) {
-
-        bootflag = 0;           /* reset flag */
-
-        /* on some clones the usart is not properly closed after the dfu
-           bootloader is done; disable usart and reboot again */
-        usart_disable(USART1);
-        reboot();
-    }
-}

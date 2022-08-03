@@ -20,12 +20,15 @@
 
 ROM_SIZE  = DEFINED(__rom_size__)  ? __rom_size__  : 4k;
 RAM_SIZE  = DEFINED(__ram_size__)  ? __ram_size__  : 4k;
+BOOT_SIZE = DEFINED(__boot_size__)  ? __boot_size__  : 4k;
+NOINIT_SIZE = DEFINED(__noinit_size__)  ? __noinitt_size__  : 4;
 
 /* Define memory regions. */
 MEMORY
 {
-	rom (rx) : ORIGIN = 0x08000000, LENGTH = ROM_SIZE
-	ram (rwx) : ORIGIN = 0x20000000, LENGTH = RAM_SIZE
+	rom (rx) : ORIGIN = 0x08000000 + BOOT_SIZE, LENGTH = ROM_SIZE - BOOT_SIZE
+	ram (rwx) : ORIGIN = 0x20000000, LENGTH = RAM_SIZE - NOINIT_SIZE
+	noinit_ram (rwx) : ORIGIN = 0x20000000 + LENGTH(ram), LENGTH = NOINIT_SIZE
 }
 
 /* Enforce emmition of the vector table. */
@@ -99,11 +102,12 @@ SECTIONS
 		_ebss = .;
 	} >ram
 
-	.noinit : {
+	.noinit (NOLOAD): {
+        _noinit = .;
 		*(.noinit*)	/* Read-write persistent data */
 		. = ALIGN(4);
         _enoinit = .;
-	} >ram
+	} >noinit_ram
 
 	/*
 	 * The .eh_frame section appears to be used for C++ exception handling.

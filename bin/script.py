@@ -15,12 +15,22 @@ else:
 rom_size = f"{bc.get('upload.maximum_size') // 1024}K"
 ram_size = f"{bc.get('upload.maximum_ram_size') // 1024}K"
 
+boot_size = env.GetProjectOption("board_bootloader_size", "")
+
 env.Append(CCFLAGS=["-I", f"lib/freertos/portable/GCC/ARM_CM{core}",
+                    f"-DFLASH_SIZE={bc.get('upload.maximum_size')}",
                     f"-DRAM_SIZE={bc.get('upload.maximum_ram_size')}",
                     f"-DRAM_{ram_size}"])
+if boot_size:
+    env.Append(CCFLAGS=[f"-DFLASH_BOOTLDR_SIZE={boot_size}"])
 
 env.Append(LINKFLAGS=[f"-Wl,--defsym=__rom_size__={rom_size}",
                       f"-Wl,--defsym=__ram_size__={ram_size}"])
+
+if env["PIOENV"] == "bootloader":
+    env.Append(LINKFLAGS=["-Wl,--defsym=__boot_size__=0"])
+else:
+    env.Append(LINKFLAGS=[f"-Wl,--defsym=__boot_size__={boot_size}"])
 
 # mark these libs as system to ignore GCC warnings
 env.Append(CCFLAGS=["-isystem", "lib/uip/uip",

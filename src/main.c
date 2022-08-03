@@ -93,9 +93,6 @@ void vApplicationTickHook(void)
 
 int main(void)
 {
-    /* jump to bootloader if magic string is set */
-    check_boot_flag();
-
     clock_setup();
     gpio_setup();
 
