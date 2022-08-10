@@ -25,6 +25,7 @@
 #define PORT_LED                                GPIOB
 #endif
 #endif
+
 #ifndef PIN_LED
 #ifdef STM32F1
 #define PIN_LED                                 GPIO13
@@ -43,15 +44,15 @@
 
 void sys_tick_handler(void)
 {
-	gpio_toggle(PORT_LED, PIN_LED);
+    gpio_toggle(PORT_LED, PIN_LED);
 }
 
 static void systick_setup(void)
 {
-	systick_set_clocksource(STK_CSR_CLKSOURCE_AHB);
-	systick_set_frequency(20, rcc_ahb_frequency);
-	systick_counter_enable();
-	systick_interrupt_enable();
+    systick_set_clocksource(STK_CSR_CLKSOURCE_AHB);
+    systick_set_frequency(20, rcc_ahb_frequency);
+    systick_counter_enable();
+    systick_interrupt_enable();
 }
 
 static void clock_setup(void)
@@ -60,8 +61,17 @@ static void clock_setup(void)
 
     /* Enable Periperal clocks. */
     rcc_periph_clock_enable(RCC_GPIOA);
+#if PORT_LED == GPIOB
     rcc_periph_clock_enable(RCC_GPIOB);
+#elif PORT_LED == GPIOC
     rcc_periph_clock_enable(RCC_GPIOC);
+#elif PORT_LED == GPIOD
+    rcc_periph_clock_enable(RCC_GPIOD);
+#elif PORT_LED == GPIOE
+    rcc_periph_clock_enable(RCC_GPIOE);
+#elif PORT_LED == GPIOF
+    rcc_periph_clock_enable(RCC_GPIOF);
+#endif
     rcc_periph_clock_enable(RCC_USART1);
 #ifdef STM32F1
     rcc_periph_clock_enable(RCC_AFIO);
