@@ -59,15 +59,6 @@
 #define configNET_MASK2         255
 #define configNET_MASK3         0
 
-/* Start of bootloader region */
-#ifndef BOOTLOADER_ADDR
-#ifdef STM32F1
-#define BOOTLOADER_ADDR         0x1FFFF000UL
-#else
-#define BOOTLOADER_ADDR         0x1FFFEC00UL
-#endif
-#endif
-
 #ifndef BOOTLOADER_MAGIC
 #define BOOTLOADER_MAGIC        ("\xff" "\xff" "BOOTLOADER" "\xff" "\xff")
 #endif

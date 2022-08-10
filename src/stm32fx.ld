@@ -18,17 +18,19 @@
  */
 
 
-ROM_SIZE  = DEFINED(__rom_size__)  ? __rom_size__  : 4k;
-RAM_SIZE  = DEFINED(__ram_size__)  ? __ram_size__  : 4k;
-BOOT_SIZE = DEFINED(__boot_size__)  ? __boot_size__  : 4k;
-NOINIT_SIZE = DEFINED(__noinit_size__)  ? __noinitt_size__  : 4;
+ROM_SIZE    = DEFINED(__rom_size__)     ? __rom_size__     : 4k;
+RAM_SIZE    = DEFINED(__ram_size__)     ? __ram_size__     : 4k;
+BOOT_SIZE   = DEFINED(__boot_size__)    ? __boot_size__    : 4k;
+NOINIT_SIZE = DEFINED(__noinit_size__)  ? __noinit_size__  : 4;
+IVT_SIZE    = DEFINED(__ivt_size__)     ? __ivt_size__     : 0;
 
 /* Define memory regions. */
 MEMORY
 {
-	rom (rx) : ORIGIN = 0x08000000 + BOOT_SIZE, LENGTH = ROM_SIZE - BOOT_SIZE
-	ram (rwx) : ORIGIN = 0x20000000, LENGTH = RAM_SIZE - NOINIT_SIZE
-	noinit_ram (rwx) : ORIGIN = 0x20000000 + LENGTH(ram), LENGTH = NOINIT_SIZE
+	rom (rx)         : ORIGIN = 0x08000000 + BOOT_SIZE,              LENGTH = ROM_SIZE - BOOT_SIZE
+	ivt (rwx)        : ORIGIN = 0x20000000,                          LENGTH = IVT_SIZE
+	ram (rwx)        : ORIGIN = 0x20000000 + IVT_SIZE,               LENGTH = RAM_SIZE - IVT_SIZE - NOINIT_SIZE
+	noinit_ram (rwx) : ORIGIN = 0x20000000 + RAM_SIZE - NOINIT_SIZE, LENGTH = NOINIT_SIZE
 }
 
 /* Enforce emmition of the vector table. */
@@ -101,6 +103,13 @@ SECTIONS
 		. = ALIGN(4);
 		_ebss = .;
 	} >ram
+
+	.ivt (NOLOAD): {
+        _ivt = .;
+		*(.ivt*)	/* Remapped interrupt vector table */
+		. = ALIGN(4);
+        _eivt = .;
+	} >ivt
 
 	.noinit (NOLOAD): {
         _noinit = .;

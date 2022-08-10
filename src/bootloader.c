@@ -5,6 +5,9 @@
 #include <libopencm3/stm32/flash.h>
 #include <libopencm3/stm32/gpio.h>
 #include <libopencm3/stm32/usart.h>
+#ifdef STM32F0
+#include <libopencm3/stm32/syscfg.h>
+#endif
 
 #ifndef FLASH_BOOTLDR_SIZE
 #define FLASH_BOOTLDR_SIZE                      0x1000
@@ -12,6 +15,21 @@
 #define FLASH_BOOTLDR_PAYLOAD_SIZE              (FLASH_SIZE - FLASH_BOOTLDR_SIZE)
 #define APP_ADDR                                (FLASH_BASE + FLASH_BOOTLDR_SIZE)
 #define END_ADDR                                (FLASH_BASE + FLASH_SIZE)
+
+#ifndef PORT_LED
+#ifdef STM32F1
+#define PORT_LED                                GPIOC
+#else
+#define PORT_LED                                GPIOB
+#endif
+#endif
+#ifndef PIN_LED
+#ifdef STM32F1
+#define PIN_LED                                 GPIO13
+#else
+#define PIN_LED                                 GPIO11
+#endif
+#endif
 
 #define SEND_ACK(p)     do { \
                             usart_send_blocking(p, 0x79); \
@@ -27,19 +45,28 @@ static void clock_setup(void)
 
     /* Enable Periperal clocks. */
     rcc_periph_clock_enable(RCC_GPIOA);
-    rcc_periph_clock_enable(RCC_GPIOC);
+    rcc_periph_clock_enable(PORT_LED);
     rcc_periph_clock_enable(RCC_USART1);
+#ifdef STM32F1
     rcc_periph_clock_enable(RCC_AFIO);
+#endif
 }
 
 static void gpio_setup(void)
 {
-    gpio_set_mode(GPIOC, GPIO_MODE_OUTPUT_2_MHZ,
-                  GPIO_CNF_OUTPUT_PUSHPULL, GPIO13);
+#ifdef STM32F0
+    gpio_mode_setup(GPIOA, GPIO_MODE_AF, GPIO_PUPD_NONE, GPIO10 | GPIO9);
+    gpio_set_af(GPIOA, GPIO_AF1, GPIO10 | GPIO9);
 
+    gpio_mode_setup(PORT_LED, GPIO_MODE_OUTPUT, GPIO_PUPD_NONE, PIN_LED);
+#else
     gpio_set_mode(GPIOA, GPIO_MODE_OUTPUT_50_MHZ,
-                  GPIO_CNF_OUTPUT_ALTFN_PUSHPULL, GPIO_USART1_TX);
-    gpio_set_mode(GPIOA, GPIO_MODE_INPUT, GPIO_CNF_INPUT_FLOAT, GPIO_USART1_RX);
+                  GPIO_CNF_OUTPUT_ALTFN_PUSHPULL, GPIO9);
+    gpio_set_mode(GPIOA, GPIO_MODE_INPUT, GPIO_CNF_INPUT_FLOAT, GPIO10);
+
+    gpio_set_mode(PORT_LED, GPIO_MODE_OUTPUT_2_MHZ, GPIO_CNF_OUTPUT_PUSHPULL,
+                  PIN_LED);
+#endif
 }
 
 static void usart_setup(void)
@@ -51,7 +78,10 @@ static void usart_setup(void)
     usart_set_stopbits(USART1, USART_CR2_STOPBITS_1);
     usart_set_mode(USART1, USART_MODE_TX_RX);
     usart_set_flow_control(USART1, USART_FLOWCONTROL_NONE);
-
+#ifdef STM32F0
+    /* disable rx overrun */
+    USART_CR3(USART1) |= USART_CR3_OVRDIS;
+#endif
     usart_enable(USART1);
 }
 
@@ -73,6 +103,23 @@ static int get_addr(uint32_t * addr)
     cs ^= usart_recv_blocking(USART1);
 
     return cs;
+}
+
+static void run_app(void)
+{
+    /* Set vector table base address */
+#ifdef STM32F1
+    SCB_VTOR = APP_ADDR & 0xFFFF;
+#else
+    memcpy((void *)(0x20000000), (void *)APP_ADDR, IVT_SIZE);
+    rcc_periph_clock_enable(RCC_SYSCFG_COMP);
+    SYSCFG_CFGR1 |= SYSCFG_CFGR1_MEM_MODE_SRAM;
+    rcc_periph_clock_disable(RCC_SYSCFG_COMP);
+#endif
+    /* Initialise master stack pointer. */
+    asm volatile ("msr msp, %0"::"g" (*(volatile uint32_t *)APP_ADDR));
+    /* Jump to application. */
+    (*(void (**)())(APP_ADDR + 4)) ();
 }
 
 enum task_state {
@@ -102,12 +149,7 @@ int main(void)
             cksum ^= base_addr[i];
 
         if (cksum == 0) {
-            /* Set vector table base address */
-            SCB_VTOR = APP_ADDR & 0xFFFF;
-            /* Initialise master stack pointer. */
-            asm volatile ("msr msp, %0"::"g" (*(volatile uint32_t *)APP_ADDR));
-            /* Jump to application. */
-            (*(void (**)())(APP_ADDR + 4)) ();
+            run_app();
         }
     }
 

@@ -37,7 +37,7 @@
 #if (RAM_SIZE > 8192)
 #define configTOTAL_HEAP_SIZE                   ( (size_t) (17.25 * 1024) )
 #else
-#define configTOTAL_HEAP_SIZE                   ( (size_t) (6.25 * 1024) )
+#define configTOTAL_HEAP_SIZE                   ( (size_t) (5.75 * 1024) )
 #endif
 
 #define configMAX_TASK_NAME_LEN                 ( 16 )

@@ -25,7 +25,6 @@ extern uint16_t IW[];
 extern uint8_t QX[];
 extern uint8_t IX[];
 
-static const uint32_t BOOT_ADDR = BOOTLOADER_ADDR;
 volatile uint32_t bootflag __attribute__((section(".noinit")));
 
 void update_inputs(void)
@@ -186,7 +185,6 @@ void run_bootloader(void)
 {
     disable_output();
     bootflag = 0xDEADBEEF;      /* set flag */
-
     scb_reset_system();
 }
 
