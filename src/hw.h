@@ -7,8 +7,12 @@
 
 #ifdef STM32F1
 
+#ifndef PORT_LED
 #define PORT_LED                    GPIOA
+#endif
+#ifndef PIN_LED
 #define PIN_LED                     GPIO8
+#endif
 
 #define RX1_PERIF_ADDR              USART1_DR
 #define TX1_PERIF_ADDR              USART1_DR
@@ -18,8 +22,12 @@
 
 #else                           /* STM32F1 */
 
+#ifndef PORT_LED
 #define PORT_LED                    GPIOB
+#endif
+#ifndef PIN_LED
 #define PIN_LED                     GPIO10
+#endif
 
 #define GPIO_USART1_RX              GPIO10
 #define GPIO_USART1_TX              GPIO9

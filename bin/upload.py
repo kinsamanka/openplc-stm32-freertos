@@ -8,7 +8,10 @@ if boot_size:
 else:
     boot_size = int("0x1000", 0)
 
-start = 0x08000000 + boot_size
+if "bootloader" not in env["PIOENV"]:
+    start = 0x08000000 + boot_size
+else:
+    start = 0x08000000
 
 l = env["UPLOADERFLAGS"]
 # update bootloader start
@@ -21,7 +24,7 @@ l.insert(1, '0')
 env["UPLOADERFLAGS"] = l
 
 def before_upload(source, target, env):
-    if env['UPLOAD_PROTOCOL'] == 'serial':
+    if (env['UPLOAD_PROTOCOL'] == 'serial') & ("bootloader" not in env["PIOENV"]):
         # send magic string
         from serial import Serial
 
