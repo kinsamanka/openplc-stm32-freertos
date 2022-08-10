@@ -1,6 +1,8 @@
 #include <string.h>
 
+#include <libopencm3/cm3/nvic.h>
 #include <libopencm3/cm3/scb.h>
+#include <libopencm3/cm3/systick.h>
 #include <libopencm3/stm32/rcc.h>
 #include <libopencm3/stm32/flash.h>
 #include <libopencm3/stm32/gpio.h>
@@ -39,13 +41,27 @@
                             usart_send_blocking(p, 0x1F); \
                         } while(0)
 
+void sys_tick_handler(void)
+{
+	gpio_toggle(PORT_LED, PIN_LED);
+}
+
+static void systick_setup(void)
+{
+	systick_set_clocksource(STK_CSR_CLKSOURCE_AHB);
+	systick_set_frequency(20, rcc_ahb_frequency);
+	systick_counter_enable();
+	systick_interrupt_enable();
+}
+
 static void clock_setup(void)
 {
     rcc_clock_setup_in_hsi_out_48mhz();
 
     /* Enable Periperal clocks. */
     rcc_periph_clock_enable(RCC_GPIOA);
-    rcc_periph_clock_enable(PORT_LED);
+    rcc_periph_clock_enable(RCC_GPIOB);
+    rcc_periph_clock_enable(RCC_GPIOC);
     rcc_periph_clock_enable(RCC_USART1);
 #ifdef STM32F1
     rcc_periph_clock_enable(RCC_AFIO);
@@ -157,6 +173,7 @@ int main(void)
 
     clock_setup();
     gpio_setup();
+    systick_setup();
 
     usart_setup();
 
