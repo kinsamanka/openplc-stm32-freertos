@@ -2,48 +2,40 @@
 #define HW_H
 
 #include <stdint.h>
+#include "boards.h"
 
-#define USE_UART1
+#define NUM(a) (sizeof(a) / sizeof(*a))
+#define ct_assert(e) ((void)sizeof(char[1 - 2*!(e)]))
 
-#ifdef STM32F1
-
-#ifndef PORT_LED
-#define PORT_LED                    GPIOA
+struct gpios {
+    const uint32_t port;
+    const uint16_t pin;
+#ifdef STM32F0
+    const uint8_t af;           /* alternate function mapping number */
 #endif
-#ifndef PIN_LED
-#define PIN_LED                     GPIO8
-#endif
+};
 
-#define RX1_PERIF_ADDR              USART1_DR
-#define TX1_PERIF_ADDR              USART1_DR
+struct leds {
+    const struct gpios gpio;
+    const int inv;
+};
 
-#define USE_UART2
-#define USE_SPI
+struct uarts {
+    const uint32_t port;
+    const uint16_t rx;
+    const uint16_t tx;
+    const struct gpios en;
+};
 
-#else                           /* STM32F1 */
-
-#ifndef PORT_LED
-#define PORT_LED                    GPIOB
-#endif
-#ifndef PIN_LED
-#define PIN_LED                     GPIO10
-#endif
-
-#define GPIO_USART1_RX              GPIO10
-#define GPIO_USART1_TX              GPIO9
-
-#define RX1_PERIF_ADDR              USART1_RDR
-#define TX1_PERIF_ADDR              USART1_TDR
-
-#endif                          /* !STM32F1 */
-
+void adc_setup(void);
+void adc_start(void);
+void clock_setup(void);
+void dac_setup(void);
+void gpio_setup(void);
+void run_bootloader(void);
+void spi_setup(void);
+void timer3_setup(void);
 void update_inputs(void);
 void update_ouputs(void);
-void hw_io_setup(void);
-void run_bootloader(void);
-void check_boot_flag(void);
-void uart_set_gpio(uint32_t gpioport, uint16_t rxpin, uint16_t txpin);
-void spi_setup(void);
-void spi_set_gpio(void);
 
 #endif

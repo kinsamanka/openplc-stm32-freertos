@@ -81,7 +81,11 @@ static void dma_setup(void)
     /* USART RX DMA channel */
     dma_channel_reset(DMA1, DMA_CHANNEL5);
 
-    dma_set_peripheral_address(DMA1, DMA_CHANNEL5, (uint32_t) & RX1_PERIF_ADDR);
+#ifdef STM32F0
+    dma_set_peripheral_address(DMA1, DMA_CHANNEL5, (uint32_t) & USART1_RDR);
+#else
+    dma_set_peripheral_address(DMA1, DMA_CHANNEL5, (uint32_t) & USART1_DR);
+#endif
     dma_set_memory_address(DMA1, DMA_CHANNEL5, (uint32_t) uart_buf.data);
     dma_set_number_of_data(DMA1, DMA_CHANNEL5, UART_BUF_LEN);
     dma_set_read_from_peripheral(DMA1, DMA_CHANNEL5);
@@ -95,7 +99,11 @@ static void dma_setup(void)
     /* USART TX DMA channel */
     dma_channel_reset(DMA1, DMA_CHANNEL4);
 
-    dma_set_peripheral_address(DMA1, DMA_CHANNEL4, (uint32_t) & TX1_PERIF_ADDR);
+#ifdef STM32F0
+    dma_set_peripheral_address(DMA1, DMA_CHANNEL4, (uint32_t) & USART1_TDR);
+#else
+    dma_set_peripheral_address(DMA1, DMA_CHANNEL4, (uint32_t) & USART1_DR);
+#endif
     dma_set_memory_address(DMA1, DMA_CHANNEL4, (uint32_t) uart_buf.data);
     dma_set_number_of_data(DMA1, DMA_CHANNEL4, UART_BUF_LEN);
     dma_set_read_from_memory(DMA1, DMA_CHANNEL4);
@@ -106,11 +114,11 @@ static void dma_setup(void)
 
     dma_enable_transfer_complete_interrupt(DMA1, DMA_CHANNEL4);
 
-#ifdef STM32F1
+#ifdef STM32F0
+    nvic_enable_irq(NVIC_DMA1_CHANNEL4_7_DMA2_CHANNEL3_5_IRQ);
+#else
     nvic_enable_irq(NVIC_DMA1_CHANNEL4_IRQ);
     nvic_enable_irq(NVIC_DMA1_CHANNEL5_IRQ);
-#else
-    nvic_enable_irq(NVIC_DMA1_CHANNEL4_7_DMA2_CHANNEL3_5_IRQ);
 #endif
 }
 

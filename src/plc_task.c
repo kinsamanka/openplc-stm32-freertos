@@ -46,7 +46,8 @@ void plc_task(void *params)
 
     TickType_t last_tick = xTaskGetTickCount();
     TickType_t delay = (TickType_t) (common_ticktime__ / 1000000);
-    while (1) {
+
+    for (;;) {
         xSemaphoreTake(*mutex, portMAX_DELAY);
 
         update_inputs();
@@ -57,6 +58,9 @@ void plc_task(void *params)
 
         update_time();
 
+#ifdef ANALOG_INPUTS
+	    adc_start();
+#endif
         vTaskDelayUntil(&last_tick, delay / portTICK_RATE_MS);
     }
 }

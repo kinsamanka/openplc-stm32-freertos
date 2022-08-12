@@ -1,5 +1,8 @@
 #include <string.h>
 
+#include "boards.h"
+#include "hw.h"
+
 #include <libopencm3/cm3/nvic.h>
 #include <libopencm3/cm3/scb.h>
 #include <libopencm3/cm3/systick.h>
@@ -18,20 +21,10 @@
 #define APP_ADDR                                (FLASH_BASE + FLASH_BOOTLDR_SIZE)
 #define END_ADDR                                (FLASH_BASE + FLASH_SIZE)
 
-#ifndef PORT_LED
-#ifdef STM32F1
-#define PORT_LED                                GPIOC
+#ifdef ERR_LED
+const struct leds led = ERR_LED;
 #else
-#define PORT_LED                                GPIOB
-#endif
-#endif
-
-#ifndef PIN_LED
-#ifdef STM32F1
-#define PIN_LED                                 GPIO13
-#else
-#define PIN_LED                                 GPIO11
-#endif
+const struct leds led = RUN_LED;
 #endif
 
 #define SEND_ACK(p)     do { \
@@ -44,7 +37,7 @@
 
 void sys_tick_handler(void)
 {
-    gpio_toggle(PORT_LED, PIN_LED);
+    gpio_toggle(led.gpio.port, led.gpio.pin);
 }
 
 static void systick_setup(void)
@@ -55,22 +48,21 @@ static void systick_setup(void)
     systick_interrupt_enable();
 }
 
-static void clock_setup(void)
+void clock_setup(void)
 {
     rcc_clock_setup_in_hsi_out_48mhz();
 
     /* Enable Periperal clocks. */
     rcc_periph_clock_enable(RCC_GPIOA);
-#if PORT_LED == GPIOB
     rcc_periph_clock_enable(RCC_GPIOB);
-#elif PORT_LED == GPIOC
     rcc_periph_clock_enable(RCC_GPIOC);
-#elif PORT_LED == GPIOD
     rcc_periph_clock_enable(RCC_GPIOD);
-#elif PORT_LED == GPIOE
     rcc_periph_clock_enable(RCC_GPIOE);
-#elif PORT_LED == GPIOF
+#ifdef RCC_GPIOF
     rcc_periph_clock_enable(RCC_GPIOF);
+#endif
+#ifdef RCC_GPIOG
+    rcc_periph_clock_enable(RCC_GPIOG);
 #endif
     rcc_periph_clock_enable(RCC_USART1);
 #ifdef STM32F1
@@ -78,20 +70,21 @@ static void clock_setup(void)
 #endif
 }
 
-static void gpio_setup(void)
+void gpio_setup(void)
 {
 #ifdef STM32F0
     gpio_mode_setup(GPIOA, GPIO_MODE_AF, GPIO_PUPD_NONE, GPIO10 | GPIO9);
     gpio_set_af(GPIOA, GPIO_AF1, GPIO10 | GPIO9);
 
-    gpio_mode_setup(PORT_LED, GPIO_MODE_OUTPUT, GPIO_PUPD_NONE, PIN_LED);
+    gpio_mode_setup(led.gpio.port, GPIO_MODE_OUTPUT, GPIO_PUPD_NONE,
+                    led.gpio.pin);
 #else
     gpio_set_mode(GPIOA, GPIO_MODE_OUTPUT_50_MHZ,
                   GPIO_CNF_OUTPUT_ALTFN_PUSHPULL, GPIO9);
     gpio_set_mode(GPIOA, GPIO_MODE_INPUT, GPIO_CNF_INPUT_FLOAT, GPIO10);
 
-    gpio_set_mode(PORT_LED, GPIO_MODE_OUTPUT_2_MHZ, GPIO_CNF_OUTPUT_PUSHPULL,
-                  PIN_LED);
+    gpio_set_mode(led.gpio.port, GPIO_MODE_OUTPUT_2_MHZ,
+                  GPIO_CNF_OUTPUT_PUSHPULL, led.gpio.pin);
 #endif
 }
 

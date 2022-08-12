@@ -10,7 +10,7 @@
 #endif
 
 #ifndef HOLDING_REG_COUNT
-#define HOLDING_REG_COUNT       8
+#define HOLDING_REG_COUNT       16
 #endif
 
 #ifndef INPUT_REG_COUNT
@@ -22,7 +22,7 @@
 #endif
 
 #ifndef DISCRETE_COUNT
-#define DISCRETE_COUNT          8
+#define DISCRETE_COUNT          16
 #endif
 
 #ifndef SLAVE_ADDRESS
