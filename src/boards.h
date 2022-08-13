@@ -40,7 +40,6 @@
                                   { GPIOA,  GPIO7 }, /* Y0.7 */ \
                                   { GPIOA,  GPIO6 }, /* Y1.0 */ \
                                   { GPIOA,  GPIO2 }, /* Y1.1 */ \
-                                  { GPIOC,  GPIO7 }, /* Y1.1 */ \
                                 }
 
 #define ANALOG_INPUTS           { \
