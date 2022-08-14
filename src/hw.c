@@ -57,9 +57,6 @@ const struct uarts uart2 = UART_2;
 #ifdef UART_3
 const struct uarts uart3 = UART_3;
 #endif
-#ifdef UART_4
-const struct uarts uart4 = UART_4;
-#endif
 
 void update_inputs(void)
 {
@@ -200,8 +197,10 @@ static void uart_set_gpio(struct uarts u)
     gpio_mode_setup(u.port, GPIO_MODE_AF, GPIO_PUPD_NONE, u.rx | u.tx);
     gpio_set_af(u.port, GPIO_AF1, u.rx | u.tx);
 #endif
-    if (u.en.port)
+    if (u.en.port) {
         gpio_mode_output(u.en);
+        gpio_clear(u.en.port, u.en.pin);
+    }
 }
 
 void run_bootloader(void)
@@ -238,9 +237,6 @@ void clock_setup(void)
 #ifdef UART_3
     rcc_periph_clock_enable(RCC_USART3);
 #endif
-#ifdef UART_4
-    rcc_periph_clock_enable(RCC_UART4);
-#endif
     rcc_periph_clock_enable(RCC_SPI1);
     rcc_periph_clock_enable(RCC_DMA1);
 #if   defined ANALOG_INPUTS && defined STM32F0
@@ -258,7 +254,26 @@ void clock_setup(void)
 void gpio_setup(void)
 {
 #if defined DISABLE_JTAG_SWD && defined STM32F1
-    gpio_primary_remap(AFIO_MAPR_SWJ_CFG_JTAG_OFF_SW_OFF, 0);
+
+    uint32_t remaps = 0;
+#ifdef UART_2
+    remaps |= uart2.remaps;
+#endif
+#ifdef UART_3
+    remaps |= uart3.remaps;
+#endif
+    gpio_primary_remap(AFIO_MAPR_SWJ_CFG_JTAG_OFF_SW_OFF, remaps);
+
+#elif defined STM32F1
+
+    uint32_t remaps = 0;
+#ifdef UART_2
+    remaps |= uart2.remaps;
+#endif
+#ifdef UART_3
+    remaps |= uart3.remaps;
+#endif
+    gpio_primary_remap(0, remaps);
 #endif
 
     gpio_mode_output(run_led.gpio);
@@ -295,9 +310,6 @@ void gpio_setup(void)
 #endif
 #ifdef UART_3
     uart_set_gpio(uart3);
-#endif
-#ifdef UART_4
-    uart_set_gpio(uart4);
 #endif
 
 #ifdef USE_SPI

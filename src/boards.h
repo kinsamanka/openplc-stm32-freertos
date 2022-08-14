@@ -64,10 +64,11 @@
 
 #define DAC_CHANNELS            { 0, 1 }
 
-#define UART_4                  { \
+#define UART_3                  { \
                                   GPIOC, \
                                   GPIO11,            /* rs485 rx */ \
                                   GPIO10,            /* rs485 tx */ \
+                                  AFIO_MAPR_USART3_REMAP_PARTIAL_REMAP, \
                                   { GPIOA, GPIO14 }, /* rs485 en */ \
                                 }
 
@@ -121,6 +122,7 @@
                                   GPIOA, \
                                   GPIO10,           /* rx    */ \
                                   GPIO9 ,           /* tx    */ \
+                                  0,                /* no remap */ \
                                   { 0, 0, 0 },      /* no en */ \
                                 }
 
@@ -195,6 +197,7 @@
                                   GPIOA, \
                                   GPIO3,            /* rs485 rx */ \
                                   GPIO2,            /* rs485 tx */ \
+                                  AFIO_MAPR_USART2_REMAP, \
                                   { GPIOA, GPIO1 }, /* rs485 en */ \
                                 }
 
@@ -209,6 +212,7 @@
                                   GPIOA, \
                                   GPIO10,           /* rx    */ \
                                   GPIO9 ,           /* tx    */ \
+                                  0,                /* no remap */ \
                                   { 0, 0 },         /* no en */ \
                                 }
 #endif

@@ -32,7 +32,7 @@ static ModbusSlave rtu_slave;
 static uint8_t rtu_slave_buf[MAX_RESPONSE];
 static struct context context;
 
-extern TaskHandle_t uart_notify;
+extern TaskHandle_t uart1_notify;
 
 static volatile int skip_usart_idle = 0;
 
@@ -51,7 +51,7 @@ void dma1_channel4_7_dma2_channel3_5_isr(void)
         /* ignore the IDLE interrupt after DMA is done */
         skip_usart_idle = 1;
 
-        xTaskNotifyFromISR(uart_notify, DMA_RX_TC_BIT, eSetBits, &y);
+        xTaskNotifyFromISR(uart1_notify, DMA_RX_TC_BIT, eSetBits, &y);
     }
 #ifdef STM32F1
     portYIELD_FROM_ISR(y);
@@ -65,7 +65,7 @@ void dma1_channel4_isr(void)
 
         dma_clear_interrupt_flags(DMA1, DMA_CHANNEL4, DMA_TCIF);
 
-        xTaskNotifyFromISR(uart_notify, DMA_TX_TC_BIT, eSetBits, &y);
+        xTaskNotifyFromISR(uart1_notify, DMA_TX_TC_BIT, eSetBits, &y);
     }
 
     portYIELD_FROM_ISR(y);
@@ -171,7 +171,7 @@ void usart1_isr(void)
         USART_ICR(USART1) |= USART_ICR_IDLECF;  /* clear interrupt */
 #endif
         if (!skip_usart_idle)
-            xTaskNotifyFromISR(uart_notify, IDLE_BIT, eSetBits, &y);
+            xTaskNotifyFromISR(uart1_notify, IDLE_BIT, eSetBits, &y);
         else
             skip_usart_idle = 0;
     }
@@ -285,12 +285,12 @@ void uart1_task(void *params)
 
     modbus_uart_init(mutex);
 
-    enum task_state state = STATE_RX;
+    enum uart1_state state = UART1_RX;
 
     for (;;) {
         switch (state) {
 
-        case STATE_RX:
+        case UART1_RX:
             uart_buf.length = 0;
 
             enable_rx_dma();
@@ -300,24 +300,24 @@ void uart1_task(void *params)
             if (state_bits & (DMA_RX_TC_BIT | IDLE_BIT))
                 if ((DMA_RX_COUNT > 0 ) && usart_no_error()) {
                     uart_buf.length = DMA_RX_COUNT;
-                    state = STATE_TX;
+                    state = UART1_TX;
                 }
             break;
 
-        case STATE_TX:
+        case UART1_TX:
             /* check for bootloader magic string */
             if (uart_buf.length == magic_len)
                 if (memcmp(uart_buf.data, BOOTLOADER_MAGIC, magic_len) == 0)
                     run_bootloader();
 
             if (!handle_request())      /* handle modbus request */
-                state = STATE_RX;
+                state = UART1_RX;
 
             enable_tx_dma(uart_buf.length);
             xTaskNotifyWait(0, 0xff, &state_bits, WAIT_INFINITE);
             disable_tx_dma();
 
-            state = STATE_RX;
+            state = UART1_RX;
             break;
         }
     }

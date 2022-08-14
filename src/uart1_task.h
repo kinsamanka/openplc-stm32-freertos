@@ -13,9 +13,9 @@
 
 #define DMA_RX_COUNT    (UART_BUF_LEN - DMA_CNDTR(DMA1, DMA_CHANNEL5))
 
-enum task_state {
-    STATE_RX,
-    STATE_TX,
+enum uart1_state {
+    UART1_RX,
+    UART1_TX,
 };
 
 void uart1_setup(void);

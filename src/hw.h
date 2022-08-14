@@ -24,6 +24,7 @@ struct uarts {
     const uint32_t port;
     const uint16_t rx;
     const uint16_t tx;
+    const uint32_t remaps;
     const struct gpios en;
 };
 

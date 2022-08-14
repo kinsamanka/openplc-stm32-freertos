@@ -10,10 +10,14 @@
 #include "hw.h"
 #include "uip_task.h"
 #include "uart1_task.h"
+#include "uart2_task.h"
 #include "plc_task.h"
 
 TaskHandle_t uip_notify = NULL;
-TaskHandle_t uart_notify = NULL;
+TaskHandle_t uart1_notify = NULL;
+#if defined UART_2 || defined UART_3
+TaskHandle_t uart2_notify = NULL;
+#endif
 
 uint8_t uip_notify_flag = 0;
 
@@ -76,7 +80,13 @@ int main(void)
 
     uart1_setup();
     xTaskCreate(uart1_task, "uart1", configMINIMAL_STACK_SIZE * 2, &mutex,
-                tskIDLE_PRIORITY + 1, &uart_notify);
+                tskIDLE_PRIORITY + 1, &uart1_notify);
+
+#if defined UART_2 || defined UART_3
+    uart2_setup();
+    xTaskCreate(uart2_task, "uart2", configMINIMAL_STACK_SIZE * 2, &mutex,
+                tskIDLE_PRIORITY + 1, &uart2_notify);
+#endif
 
     /* PLC task has a higher priority */
     xTaskCreate(plc_task, "PLC", configMINIMAL_STACK_SIZE * 20, &mutex,
