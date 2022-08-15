@@ -2,11 +2,19 @@
 #define CONFIG_H
 
 #ifndef MAX_REQUEST
+#if RAM_SIZE > 20480
+#define MAX_REQUEST             256
+#else
 #define MAX_REQUEST             64
+#endif
 #endif
 
 #ifndef MAX_RESPONSE
+#if RAM_SIZE > 20480
+#define MAX_RESPONSE            256
+#else
 #define MAX_RESPONSE            64
+#endif
 #endif
 
 #ifndef HOLDING_REG_COUNT
