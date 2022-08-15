@@ -19,9 +19,10 @@
 #include "hw.h"
 #include "uart2_task.h"
 
-#define IDLE_BIT                    0x01
+#define USART_IDLE_BIT              0x01
 #define DMA_RX_TC_BIT               0x02
 #define DMA_TX_TC_BIT               0x04
+#define USART_TC_BIT                0x08
 
 #ifdef UART_2
 
@@ -167,6 +168,9 @@ static void enable_rx_dma(void)
 
 static void disable_tx_dma(void)
 {
+    /* disable TC interrupt */
+    USART_CR1(_USART_) &= ~USART_CR1_TCIE;
+
     usart_disable_tx_dma(_USART_);
     dma_disable_channel(DMA1, _DMA_CHANNEL_TX_);
 
@@ -182,6 +186,9 @@ static void enable_tx_dma(int size)
     dma_set_number_of_data(DMA1, _DMA_CHANNEL_TX_, size);
     dma_enable_channel(DMA1, _DMA_CHANNEL_TX_);
     usart_enable_tx_dma(_USART_);
+
+    /* enable TC interrupt */
+    USART_CR1(_USART_) |= USART_CR1_TCIE;
 }
 
 void _USART_ISR_(void)
@@ -193,9 +200,17 @@ void _USART_ISR_(void)
         (void)USART_DR(_USART_);                /* clear IDLE flag */
 
         if (!skip_usart_idle)
-            xTaskNotifyFromISR(uart2_notify, IDLE_BIT, eSetBits, &y);
+            xTaskNotifyFromISR(uart2_notify, USART_IDLE_BIT, eSetBits, &y);
         else
             skip_usart_idle = 0;
+    }
+
+    if (usart_get_flag(_USART_, USART_FLAG_TC) != 0) {
+
+        USART_SR(_USART_) &= ~USART_FLAG_TC;     /* clear TC flag */
+
+        xTaskNotifyFromISR(uart2_notify, USART_TC_BIT, eSetBits, &y);
+
     }
 
     portYIELD_FROM_ISR(y);
@@ -315,7 +330,7 @@ void uart2_task(void *params)
             xTaskNotifyWait(0, 0xff, &state_bits, WAIT_INFINITE);
             disable_rx_dma();
 
-            if (state_bits & (DMA_RX_TC_BIT | IDLE_BIT))
+            if (state_bits & (DMA_RX_TC_BIT | USART_IDLE_BIT))
                 if ((_DMA_RX_COUNT_ > 0) && usart_no_error()) {
                     uart_buf.length = _DMA_RX_COUNT_;
                     state = UART2_TX;
@@ -328,10 +343,12 @@ void uart2_task(void *params)
 
             enable_tx_dma(uart_buf.length);
 
-            xTaskNotifyWait(0, 0xff, &state_bits, WAIT_INFINITE);
+            uint32_t j = 0;
 
-            while (usart_get_flag(_USART_, USART_FLAG_TC) == 0)
-                vTaskDelay(1);
+            while (j != (DMA_TX_TC_BIT | USART_TC_BIT)) {
+                xTaskNotifyWait(0, 0xff, &state_bits, WAIT_INFINITE);
+                j |= state_bits;
+            }
 
             disable_tx_dma();
 
