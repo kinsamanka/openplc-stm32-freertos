@@ -22,7 +22,6 @@
 #define IDLE_BIT                    0x01
 #define DMA_RX_TC_BIT               0x02
 #define DMA_TX_TC_BIT               0x04
-#define TC_BIT                      0x08
 
 #ifdef UART_2
 
@@ -189,21 +188,14 @@ void _USART_ISR_(void)
 {
     portBASE_TYPE y = pdFALSE;
 
-    int idle = 0;
+    if (usart_get_flag(_USART_, USART_FLAG_IDLE) != 0) {
 
-    if ((idle = (usart_get_flag(_USART_, USART_FLAG_IDLE) != 0)) ||
-        (usart_get_flag(_USART_, USART_FLAG_TC) != 0)) {
+        (void)USART_DR(_USART_);                /* clear IDLE flag */
 
-        (void)USART_DR(_USART_);        /* clear int flag */
-
-        if (idle) {
-            if (!skip_usart_idle)
-                xTaskNotifyFromISR(uart2_notify, IDLE_BIT, eSetBits, &y);
-            else
-                skip_usart_idle = 0;
-        } else {
-            xTaskNotifyFromISR(uart2_notify, TC_BIT, eSetBits, &y);
-        }
+        if (!skip_usart_idle)
+            xTaskNotifyFromISR(uart2_notify, IDLE_BIT, eSetBits, &y);
+        else
+            skip_usart_idle = 0;
     }
 
     portYIELD_FROM_ISR(y);
@@ -238,7 +230,7 @@ void uart2_setup(void)
     usart_set_parity(_USART_, SLAVE_PARITY);
     usart_set_flow_control(_USART_, USART_FLOWCONTROL_NONE);
 
-    /* enable IDLE & TC interrupt */
+    /* enable IDLE interrupt */
     USART_CR1(_USART_) |= USART_CR1_IDLEIE;
 
     usart_enable(_USART_);
@@ -338,7 +330,8 @@ void uart2_task(void *params)
 
             xTaskNotifyWait(0, 0xff, &state_bits, WAIT_INFINITE);
 
-            vTaskDelay(1);
+            while (usart_get_flag(_USART_, USART_FLAG_TC) == 0)
+                vTaskDelay(1);
 
             disable_tx_dma();
 
