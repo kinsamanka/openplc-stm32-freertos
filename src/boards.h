@@ -197,7 +197,7 @@
                                   GPIOA, \
                                   GPIO3,            /* rs485 rx */ \
                                   GPIO2,            /* rs485 tx */ \
-                                  AFIO_MAPR_USART2_REMAP, \
+                                  0, \
                                   { GPIOA, GPIO1 }, /* rs485 en */ \
                                 }
 
