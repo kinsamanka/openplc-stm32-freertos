@@ -4,9 +4,6 @@
 #include <stdint.h>
 #include "boards.h"
 
-#define NUM(a) (sizeof(a) / sizeof(*a))
-#define ct_assert(e) ((void)sizeof(char[1 - 2*!(e)]))
-
 struct gpios {
     const uint32_t port;
     const uint16_t pin;

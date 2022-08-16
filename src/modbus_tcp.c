@@ -6,7 +6,6 @@
 #include <string.h>
 
 static TaskHandle_t modbus_slave;
-static struct modbus_slave_msg msg;
 static TaskHandle_t notify;
 
 static struct modbus_tcp_state s;
@@ -26,6 +25,8 @@ static int handle_request(TaskHandle_t mbs, struct modbus_slave_msg *msg)
 
 void modbus_tcp_init(void *params)
 {
+    uip_listen(HTONS(configMODBUS_PORT));
+
     modbus_slave = ((struct task_parameters *)params)->modbus_slave;
     notify = ((struct task_parameters *)params)->uip;
 }
@@ -33,7 +34,7 @@ void modbus_tcp_init(void *params)
 void modbus_tcp_appcall(void)
 {
     uint8_t *dat;
-    uint8_t sz;
+    uint16_t sz;
 
     if (uip_acked())
         s.len = 0;
@@ -43,17 +44,16 @@ void modbus_tcp_appcall(void)
         dat = uip_appdata;
 
         struct modbus_slave_msg msg = {
-            dat,
-            &sz,
+            s.data,
+            &s.len,
             notify,
         };
 
-        if (handle_request(modbus_slave, &msg)) {
-            memcpy(s.data, dat, sz);
-            s.len = sz;
-        } else {
+        s.len = (sz < NUM(s.data)) ? sz : NUM(s.data);
+        memcpy(s.data, dat, s.len);
+
+        if (!handle_request(modbus_slave, &msg))
             s.len = 0;
-        }
     }
 
     if ((uip_rexmit() || uip_newdata()) && s.len)

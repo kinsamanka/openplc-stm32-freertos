@@ -1,6 +1,9 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
+#define NUM(a) (sizeof(a) / sizeof(*a))
+#define ct_assert(e) ((void)sizeof(char[1 - 2*!(e)]))
+
 #ifndef MAX_REQUEST
 #if RAM_SIZE > 20480
 #define MAX_REQUEST             256

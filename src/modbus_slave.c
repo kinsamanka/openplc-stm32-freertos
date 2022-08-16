@@ -12,7 +12,7 @@ extern uint8_t QX[];
 extern uint8_t IX[];
 
 static ModbusErrorInfo mberr;
-static ModbusSlave rtu_slave;
+static ModbusSlave status;
 
 static SemaphoreHandle_t mutex;
 
@@ -20,13 +20,13 @@ static ModbusError staticAllocator(ModbusBuffer * buffer, uint16_t size,
                                    void *context)
 {
     (void)context;
-    static uint8_t rtu_slave_buf[MAX_RESPONSE];
+    static uint8_t status_buf[MAX_RESPONSE];
 
     if (size != 0) {
         // Allocation reqest
         if (size <= MAX_RESPONSE) {
             // Allocation request is within bounds
-            buffer->data = rtu_slave_buf;
+            buffer->data = status_buf;
             return MODBUS_OK;
         } else {
             // Allocation error
@@ -142,11 +142,14 @@ static ModbusError regCallback(const ModbusSlave * slave,
     return MODBUS_OK;
 }
 
-static int handle_request(char *data, uint16_t * length)
+static int handle_request(uint8_t * data, uint16_t * length, int rtu)
 {
-    mberr =
-        modbusParseRequestRTU(&rtu_slave, SLAVE_ADDRESS, (const uint8_t *)data,
-                              *length);
+    if (rtu) {
+        mberr = modbusParseRequestRTU(&status, SLAVE_ADDRESS,
+                                      (const uint8_t *)data, *length);
+    } else {
+        mberr = modbusParseRequestTCP(&status, (const uint8_t *)data, *length);
+    }
 
     switch (modbusGetGeneralError(mberr)) {
     case MODBUS_OK:
@@ -156,7 +159,7 @@ static int handle_request(char *data, uint16_t * length)
 
         if (*length < 2)
             break;
-        mberr = modbusBuildExceptionRTU(&rtu_slave,
+        mberr = modbusBuildExceptionRTU(&status,
                                         SLAVE_ADDRESS,
                                         data[1], MODBUS_EXCEP_SLAVE_FAILURE);
         break;
@@ -166,10 +169,10 @@ static int handle_request(char *data, uint16_t * length)
     }
 
     // return response if everything is OK
-    if (modbusIsOk(mberr) && modbusSlaveGetResponseLength(&rtu_slave)) {
+    if (modbusIsOk(mberr) && modbusSlaveGetResponseLength(&status)) {
 
-        int sz = modbusSlaveGetResponseLength(&rtu_slave);
-        uint8_t *dat = (uint8_t *) modbusSlaveGetResponse(&rtu_slave);
+        uint16_t sz = modbusSlaveGetResponseLength(&status);
+        uint8_t *dat = (uint8_t *) modbusSlaveGetResponse(&status);
 
         *length = sz;
         memcpy(data, dat, sz);
@@ -183,8 +186,9 @@ static int handle_request(char *data, uint16_t * length)
 void modbus_slave_task(void *params)
 {
     mutex = ((struct task_parameters *)params)->mutex;
+    TaskHandle_t uip_task = ((struct task_parameters *)params)->uip;
 
-    mberr = modbusSlaveInit(&rtu_slave,
+    mberr = modbusSlaveInit(&status,
                             regCallback,
                             NULL,
                             staticAllocator,
@@ -197,7 +201,8 @@ void modbus_slave_task(void *params)
         xTaskNotifyWaitIndexed(1, 0x00, 0xffffffff, (uint32_t *) & msg,
                                portMAX_DELAY);
 
-        uint32_t result = handle_request(msg->data, msg->length);
+        int rtu = msg->src != uip_task;
+        uint32_t result = handle_request(msg->data, msg->length, rtu);
 
         xTaskNotifyIndexed(msg->src, 1, result, eSetValueWithOverwrite);
     }

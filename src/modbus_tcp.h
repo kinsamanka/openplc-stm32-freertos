@@ -6,7 +6,7 @@
 
 typedef struct modbus_tcp_state {
     uint8_t data[MAX_REQUEST];
-    uint8_t len;
+    uint16_t len;
 } uip_tcp_appstate_t;
 
 void modbus_tcp_appcall(void);

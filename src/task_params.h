@@ -14,7 +14,7 @@ struct task_parameters {
 };
 
 struct modbus_slave_msg {
-    char *data;
+    uint8_t *data;
     uint16_t *length;
     TaskHandle_t src;
 };
