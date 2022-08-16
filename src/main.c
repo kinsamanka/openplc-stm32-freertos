@@ -12,16 +12,10 @@
 #include "uart1_task.h"
 #include "uart2_task.h"
 #include "plc_task.h"
+#include "modbus_slave.h"
+#include "task_params.h"
 
-TaskHandle_t uip_notify = NULL;
-TaskHandle_t uart1_notify = NULL;
-#if defined UART_2 || defined UART_3
-TaskHandle_t uart2_notify = NULL;
-#endif
-
-uint8_t uip_notify_flag = 0;
-
-static SemaphoreHandle_t mutex = NULL;
+struct task_parameters task_params;
 
 /******************************************************************************/
 
@@ -42,9 +36,9 @@ void vApplicationTickHook(void)
 {
     BaseType_t y = pdFALSE;
 
-    if (uip_notify_flag) {
-        vTaskNotifyGiveFromISR(uip_notify, &y);
-        uip_notify_flag = 0;
+    if (task_params.uip_notify_flag) {
+        vTaskNotifyGiveFromISR(task_params.uip, &y);
+        task_params.uip_notify_flag = 0;
     }
 
     portYIELD_FROM_ISR(y);
@@ -67,29 +61,32 @@ int main(void)
     dac_setup();
 #endif
 
-    mutex = xSemaphoreCreateMutex();
+    task_params.mutex = xSemaphoreCreateMutex();
 
     xTaskCreate(blink_task, "Blink", configMINIMAL_STACK_SIZE, NULL,
                 tskIDLE_PRIORITY + 1, NULL);
 
 #ifdef USE_SPI
     spi_setup();
-    xTaskCreate(uip_task, "uIP", configMINIMAL_STACK_SIZE * 16, &mutex,
-                tskIDLE_PRIORITY + 1, &uip_notify);
+    xTaskCreate(uip_task, "uIP", configMINIMAL_STACK_SIZE * 16, &task_params,
+                tskIDLE_PRIORITY + 1, &task_params.uip);
 #endif
 
     uart1_setup();
-    xTaskCreate(uart1_task, "uart1", configMINIMAL_STACK_SIZE * 2, &mutex,
-                tskIDLE_PRIORITY + 1, &uart1_notify);
+    xTaskCreate(uart1_task, "uart1", configMINIMAL_STACK_SIZE * 2, &task_params,
+                tskIDLE_PRIORITY + 1, &task_params.uart1);
 
 #if defined UART_2 || defined UART_3
     uart2_setup();
-    xTaskCreate(uart2_task, "uart2", configMINIMAL_STACK_SIZE * 2, &mutex,
-                tskIDLE_PRIORITY + 1, &uart2_notify);
+    xTaskCreate(uart2_task, "uart2", configMINIMAL_STACK_SIZE * 2, &task_params,
+                tskIDLE_PRIORITY + 1, &task_params.uart2);
 #endif
 
+    xTaskCreate(modbus_slave_task, "MBSlave", configMINIMAL_STACK_SIZE * 2,
+                &task_params, tskIDLE_PRIORITY + 1, &task_params.modbus_slave);
+
     /* PLC task has a higher priority */
-    xTaskCreate(plc_task, "PLC", configMINIMAL_STACK_SIZE * 20, &mutex,
+    xTaskCreate(plc_task, "PLC", configMINIMAL_STACK_SIZE * 20, &task_params,
                 tskIDLE_PRIORITY + 2, NULL);
 
     vTaskStartScheduler();

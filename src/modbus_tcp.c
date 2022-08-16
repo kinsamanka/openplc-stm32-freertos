@@ -1,61 +1,33 @@
+#include <FreeRTOS.h>
 #include "uip.h"
 #include "modbus_tcp.h"
+#include "task_params.h"
 
 #include <string.h>
 
-static ModbusErrorInfo mberr;
-static ModbusSlave tcp_slave;
+static TaskHandle_t modbus_slave;
+static struct modbus_slave_msg msg;
+static TaskHandle_t notify;
 
 static struct modbus_tcp_state s;
-static uint8_t tcp_slave_buf[MAX_RESPONSE];
-static struct context context;
 
-static int tcp_mb_handle_req(uint8_t ** dat, uint8_t * sz)
+static int handle_request(TaskHandle_t mbs, struct modbus_slave_msg *msg)
 {
-    mberr = modbusParseRequestTCP(&tcp_slave, *dat, *sz);
+    uint32_t result;
 
-    switch (modbusGetGeneralError(mberr)) {
+    while (!xTaskNotifyIndexed
+           (mbs, 1, (uint32_t) msg, eSetValueWithoutOverwrite))
+        vTaskDelay(10);
 
-    case MODBUS_OK:
-        break;
+    xTaskNotifyWaitIndexed(1, 0x00, 0xffffffff, &result, portMAX_DELAY);
 
-    case MODBUS_ERROR_ALLOC:
-        if (*sz < 2)
-            break;
-        mberr = modbusBuildExceptionRTU(&tcp_slave,
-                                        SLAVE_ADDRESS,
-                                        *dat[1], MODBUS_EXCEP_SLAVE_FAILURE);
-        break;
-
-    default:
-        return 0;
-    }
-
-    // return response if everything is OK
-    if (modbusIsOk(mberr) && modbusSlaveGetResponseLength(&tcp_slave)) {
-        *sz = modbusSlaveGetResponseLength(&tcp_slave);
-        *dat = (uint8_t *) modbusSlaveGetResponse(&tcp_slave);
-        return 1;
-    } else {
-        return 0;
-    }
+    return result;
 }
 
-void modbus_tcp_init(SemaphoreHandle_t * mutex)
+void modbus_tcp_init(void *params)
 {
-    context.buf = tcp_slave_buf;
-    context.mutex = mutex;
-
-    uip_listen(HTONS(configMODBUS_PORT));
-
-    mberr = modbusSlaveInit(&tcp_slave,
-                            regCallback,
-                            NULL,
-                            staticAllocator,
-                            modbusSlaveDefaultFunctions,
-                            modbusSlaveDefaultFunctionCount);
-
-    modbusSlaveSetUserPointer(&tcp_slave, (void *)&context);
+    modbus_slave = ((struct task_parameters *)params)->modbus_slave;
+    notify = ((struct task_parameters *)params)->uip;
 }
 
 void modbus_tcp_appcall(void)
@@ -69,7 +41,14 @@ void modbus_tcp_appcall(void)
     if (uip_newdata()) {
         sz = uip_datalen();
         dat = uip_appdata;
-        if (tcp_mb_handle_req(&dat, &sz)) {
+
+        struct modbus_slave_msg msg = {
+            dat,
+            &sz,
+            notify,
+        };
+
+        if (handle_request(modbus_slave, &msg)) {
             memcpy(s.data, dat, sz);
             s.len = sz;
         } else {

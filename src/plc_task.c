@@ -7,6 +7,7 @@
 #include "plc_task.h"
 #include "hw.h"
 #include "config.h"
+#include "task_params.h"
 #include "iec_std_lib.h"
 
 TIME __CURRENT_TIME;
@@ -35,7 +36,7 @@ static void update_time(void)
 
 void plc_task(void *params)
 {
-    SemaphoreHandle_t *mutex = (SemaphoreHandle_t *) params;
+    SemaphoreHandle_t mutex = ((struct task_parameters *)params)->mutex;
 
     memset(QW, 0, HOLDING_REG_COUNT * sizeof(uint16_t));
     memset(IW, 0, INPUT_REG_COUNT * sizeof(uint16_t));
@@ -48,13 +49,13 @@ void plc_task(void *params)
     TickType_t delay = (TickType_t) (common_ticktime__ / 1000000);
 
     for (;;) {
-        xSemaphoreTake(*mutex, portMAX_DELAY);
+        xSemaphoreTake(mutex, portMAX_DELAY);
 
         update_inputs();
         config_run__(__tick++);
         update_ouputs();
 
-        xSemaphoreGive(*mutex);
+        xSemaphoreGive(mutex);
 
         update_time();
 

@@ -1,6 +1,5 @@
 #include <FreeRTOS.h>
 #include <task.h>
-#include <semphr.h>
 
 #include <uip/uip.h>
 #include <uip/uip_arp.h>
@@ -12,8 +11,11 @@
 #include "tapdev.h"
 #include "modbus_tcp.h"
 #include "uip_task.h"
+#include "task_params.h"
 
 #define BUF ((struct uip_eth_hdr *)&uip_buf[0])
+
+uint8_t *uip_notify_flag;
 
 /******************************************************************************/
 
@@ -26,7 +28,7 @@ clock_time_t clock_time(void)
 
 void uip_task(void *params)
 {
-    SemaphoreHandle_t *mutex = (SemaphoreHandle_t *) params;
+    uip_notify_flag = &((struct task_parameters *) params)->uip_notify_flag;
 
     uip_ipaddr_t ipaddr;
     struct timer periodic_timer, arp_timer;
@@ -49,7 +51,7 @@ void uip_task(void *params)
                configNET_MASK3);
     uip_setnetmask(ipaddr);
 
-    modbus_tcp_init(mutex);
+    modbus_tcp_init(params);
 
     int i;
     for (;;) {

@@ -9,13 +9,6 @@
 
 #include "config.h"
 
-struct context {
-    uint8_t *buf;
-    SemaphoreHandle_t *mutex;
-};
-
-ModbusError staticAllocator(ModbusBuffer *, uint16_t, void *);
-ModbusError regCallback(const ModbusSlave *, const ModbusRegisterCallbackArgs *,
-                        ModbusRegisterCallbackResult *);
+void modbus_slave_task(void *);
 
 #endif

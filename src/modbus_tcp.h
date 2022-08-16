@@ -15,6 +15,6 @@ void modbus_tcp_appcall(void);
 #define UIP_APPCALL modbus_tcp_appcall
 #endif
 
-void modbus_tcp_init(SemaphoreHandle_t *);
+void modbus_tcp_init(void *params);
 
 #endif

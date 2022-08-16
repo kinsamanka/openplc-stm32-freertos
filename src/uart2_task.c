@@ -1,6 +1,6 @@
-#include "modbus_slave.h"
+#include <FreeRTOS.h>
 #include <task.h>
-#include <queue.h>
+#include <semphr.h>
 
 #include <libopencm3/cm3/nvic.h>
 #include <libopencm3/stm32/dma.h>
@@ -9,10 +9,9 @@
 
 #include <lightmodbus/lightmodbus.h>
 
-#include <string.h>
-
 #include "config.h"
 #include "hw.h"
+#include "task_params.h"
 
 #if defined STM32F1 && (defined UART_2 || defined UART_3)
 
@@ -71,16 +70,10 @@ const struct uarts uart = UART_3;
 
 static struct {
     char data[UART_BUF_LEN];
-    uint8_t length;
+    uint16_t length;
 } uart_buf;
 
-static ModbusErrorInfo mberr;
-static ModbusSlave rtu_slave;
-
-static uint8_t rtu_slave_buf[MAX_RESPONSE];
-static struct context context;
-
-extern TaskHandle_t uart2_notify;
+static TaskHandle_t notify;
 
 static volatile int skip_usart_idle = 0;
 
@@ -95,7 +88,7 @@ void _DMA_RX_ISR_(void)
         /* ignore the IDLE interrupt after DMA is done */
         skip_usart_idle = 1;
 
-        xTaskNotifyFromISR(uart2_notify, DMA_RX_TC_BIT, eSetBits, &y);
+        xTaskNotifyFromISR(notify, DMA_RX_TC_BIT, eSetBits, &y);
     }
 
     portYIELD_FROM_ISR(y);
@@ -109,7 +102,7 @@ void _DMA_TX_ISR_(void)
 
         dma_clear_interrupt_flags(DMA1, _DMA_CHANNEL_TX_, DMA_TCIF);
 
-        xTaskNotifyFromISR(uart2_notify, DMA_TX_TC_BIT, eSetBits, &y);
+        xTaskNotifyFromISR(notify, DMA_TX_TC_BIT, eSetBits, &y);
     }
 
     portYIELD_FROM_ISR(y);
@@ -197,19 +190,19 @@ void _USART_ISR_(void)
 
     if (usart_get_flag(_USART_, USART_FLAG_IDLE) != 0) {
 
-        (void)USART_DR(_USART_);                /* clear IDLE flag */
+        (void)USART_DR(_USART_);        /* clear IDLE flag */
 
         if (!skip_usart_idle)
-            xTaskNotifyFromISR(uart2_notify, USART_IDLE_BIT, eSetBits, &y);
+            xTaskNotifyFromISR(notify, USART_IDLE_BIT, eSetBits, &y);
         else
             skip_usart_idle = 0;
     }
 
     if (usart_get_flag(_USART_, USART_FLAG_TC) != 0) {
 
-        USART_SR(_USART_) &= ~USART_FLAG_TC;     /* clear TC flag */
+        USART_SR(_USART_) &= ~USART_FLAG_TC;    /* clear TC flag */
 
-        xTaskNotifyFromISR(uart2_notify, USART_TC_BIT, eSetBits, &y);
+        xTaskNotifyFromISR(notify, USART_TC_BIT, eSetBits, &y);
 
     }
 
@@ -255,68 +248,33 @@ void uart2_setup(void)
     dma_setup();
 }
 
-static void modbus_uart_init(SemaphoreHandle_t * mutex)
+static int handle_request(TaskHandle_t mbs, struct modbus_slave_msg *msg)
 {
-    context.buf = rtu_slave_buf;
-    context.mutex = mutex;
+    uint32_t result;
 
-    mberr = modbusSlaveInit(&rtu_slave,
-                            regCallback,
-                            NULL,
-                            staticAllocator,
-                            modbusSlaveDefaultFunctions,
-                            modbusSlaveDefaultFunctionCount);
+    while (!xTaskNotifyIndexed
+           (mbs, 1, (uint32_t) msg, eSetValueWithoutOverwrite))
+        vTaskDelay(10);
 
-    modbusSlaveSetUserPointer(&rtu_slave, (void *)&context);
-}
+    xTaskNotifyWaitIndexed(1, 0x00, 0xffffffff, &result, portMAX_DELAY);
 
-static int handle_request(void)
-{
-    mberr = modbusParseRequestRTU(&rtu_slave,
-                                  SLAVE_ADDRESS,
-                                  (const uint8_t *)uart_buf.data,
-                                  uart_buf.length);
-
-    switch (modbusGetGeneralError(mberr)) {
-    case MODBUS_OK:
-        break;
-
-    case MODBUS_ERROR_ALLOC:
-
-        if (uart_buf.length < 2)
-            break;
-        mberr = modbusBuildExceptionRTU(&rtu_slave,
-                                        SLAVE_ADDRESS,
-                                        uart_buf.data[1],
-                                        MODBUS_EXCEP_SLAVE_FAILURE);
-        break;
-
-    default:
-        return 0;
-    }
-
-    /* return response if everything is OK */
-    if (modbusIsOk(mberr) && modbusSlaveGetResponseLength(&rtu_slave)) {
-
-        int sz = modbusSlaveGetResponseLength(&rtu_slave);
-        uint8_t *dat = (uint8_t *) modbusSlaveGetResponse(&rtu_slave);
-
-        uart_buf.length = sz;
-        memcpy(uart_buf.data, dat, sz);
-
-        return 1;
-    }
-
-    return 0;
+    return result;
 }
 
 void uart2_task(void *params)
 {
     uint32_t state_bits;
 
-    SemaphoreHandle_t *mutex = (SemaphoreHandle_t *) params;
+    notify = ((struct task_parameters *)params)->uart2;
 
-    modbus_uart_init(mutex);
+    TaskHandle_t modbus_slave =
+        ((struct task_parameters *)params)->modbus_slave;
+
+    struct modbus_slave_msg msg = {
+        uart_buf.data,
+        &uart_buf.length,
+        notify,
+    };
 
     enum uart2_state state = UART2_RX;
 
@@ -338,7 +296,7 @@ void uart2_task(void *params)
             break;
 
         case UART2_TX:
-            if (!handle_request())      /* handle modbus request */
+            if (!handle_request(modbus_slave, &msg))    /* handle modbus request */
                 state = UART2_RX;
 
             enable_tx_dma(uart_buf.length);

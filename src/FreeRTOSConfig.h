@@ -59,6 +59,7 @@
 #define configKERNEL_INTERRUPT_PRIORITY         255
 #define configMAX_SYSCALL_INTERRUPT_PRIORITY    191
 #define configLIBRARY_KERNEL_INTERRUPT_PRIORITY 15
+#define configTASK_NOTIFICATION_ARRAY_ENTRIES   2
 
 #define vPortSVCHandler                         sv_call_handler
 #define xPortPendSVHandler                      pend_sv_handler

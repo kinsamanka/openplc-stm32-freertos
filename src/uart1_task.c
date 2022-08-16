@@ -1,6 +1,6 @@
-#include "modbus_slave.h"
+#include <FreeRTOS.h>
 #include <task.h>
-#include <queue.h>
+#include <semphr.h>
 
 #include <libopencm3/cm3/nvic.h>
 #include <libopencm3/stm32/dma.h>
@@ -16,6 +16,7 @@
 
 #include "hw.h"
 #include "uart1_task.h"
+#include "task_params.h"
 
 #define IDLE_BIT                    0x01
 #define DMA_RX_TC_BIT               0x02
@@ -23,16 +24,10 @@
 
 static struct {
     char data[UART_BUF_LEN];
-    uint8_t length;
+    uint16_t length;
 } uart_buf;
 
-static ModbusErrorInfo mberr;
-static ModbusSlave rtu_slave;
-
-static uint8_t rtu_slave_buf[MAX_RESPONSE];
-static struct context context;
-
-extern TaskHandle_t uart1_notify;
+static TaskHandle_t notify;
 
 static volatile int skip_usart_idle = 0;
 
@@ -51,7 +46,7 @@ void dma1_channel4_7_dma2_channel3_5_isr(void)
         /* ignore the IDLE interrupt after DMA is done */
         skip_usart_idle = 1;
 
-        xTaskNotifyFromISR(uart1_notify, DMA_RX_TC_BIT, eSetBits, &y);
+        xTaskNotifyFromISR(notify, DMA_RX_TC_BIT, eSetBits, &y);
     }
 #ifdef STM32F1
     portYIELD_FROM_ISR(y);
@@ -65,7 +60,7 @@ void dma1_channel4_isr(void)
 
         dma_clear_interrupt_flags(DMA1, DMA_CHANNEL4, DMA_TCIF);
 
-        xTaskNotifyFromISR(uart1_notify, DMA_TX_TC_BIT, eSetBits, &y);
+        xTaskNotifyFromISR(notify, DMA_TX_TC_BIT, eSetBits, &y);
     }
 
     portYIELD_FROM_ISR(y);
@@ -171,7 +166,7 @@ void usart1_isr(void)
         USART_ICR(USART1) |= USART_ICR_IDLECF;  /* clear interrupt */
 #endif
         if (!skip_usart_idle)
-            xTaskNotifyFromISR(uart1_notify, IDLE_BIT, eSetBits, &y);
+            xTaskNotifyFromISR(notify, IDLE_BIT, eSetBits, &y);
         else
             skip_usart_idle = 0;
     }
@@ -221,59 +216,17 @@ void uart1_setup(void)
     dma_setup();
 }
 
-static void modbus_uart_init(SemaphoreHandle_t * mutex)
+static int handle_request(TaskHandle_t mbs, struct modbus_slave_msg *msg)
 {
-    context.buf = rtu_slave_buf;
-    context.mutex = mutex;
+    uint32_t result;
 
-    mberr = modbusSlaveInit(&rtu_slave,
-                            regCallback,
-                            NULL,
-                            staticAllocator,
-                            modbusSlaveDefaultFunctions,
-                            modbusSlaveDefaultFunctionCount);
+    while (!xTaskNotifyIndexed
+           (mbs, 1, (uint32_t) msg, eSetValueWithoutOverwrite))
+        vTaskDelay(10);
 
-    modbusSlaveSetUserPointer(&rtu_slave, (void *)&context);
-}
+    xTaskNotifyWaitIndexed(1, 0x00, 0xffffffff, &result, portMAX_DELAY);
 
-static int handle_request(void)
-{
-    mberr = modbusParseRequestRTU(&rtu_slave,
-                                  SLAVE_ADDRESS,
-                                  (const uint8_t *)uart_buf.data,
-                                  uart_buf.length);
-
-    switch (modbusGetGeneralError(mberr)) {
-    case MODBUS_OK:
-        break;
-
-    case MODBUS_ERROR_ALLOC:
-
-        if (uart_buf.length < 2)
-            break;
-        mberr = modbusBuildExceptionRTU(&rtu_slave,
-                                        SLAVE_ADDRESS,
-                                        uart_buf.data[1],
-                                        MODBUS_EXCEP_SLAVE_FAILURE);
-        break;
-
-    default:
-        return 0;
-    }
-
-    // return response if everything is OK
-    if (modbusIsOk(mberr) && modbusSlaveGetResponseLength(&rtu_slave)) {
-
-        int sz = modbusSlaveGetResponseLength(&rtu_slave);
-        uint8_t *dat = (uint8_t *) modbusSlaveGetResponse(&rtu_slave);
-
-        uart_buf.length = sz;
-        memcpy(uart_buf.data, dat, sz);
-
-        return 1;
-    }
-
-    return 0;
+    return result;
 }
 
 void uart1_task(void *params)
@@ -281,9 +234,16 @@ void uart1_task(void *params)
     uint32_t state_bits;
     int magic_len = sizeof(BOOTLOADER_MAGIC) - 1;
 
-    SemaphoreHandle_t *mutex = (SemaphoreHandle_t *) params;
+    notify = ((struct task_parameters *)params)->uart1;
 
-    modbus_uart_init(mutex);
+    TaskHandle_t modbus_slave =
+        ((struct task_parameters *)params)->modbus_slave;
+
+    struct modbus_slave_msg msg = {
+        uart_buf.data,
+        &uart_buf.length,
+        notify,
+    };
 
     enum uart1_state state = UART1_RX;
 
@@ -298,7 +258,7 @@ void uart1_task(void *params)
             disable_rx_dma();
 
             if (state_bits & (DMA_RX_TC_BIT | IDLE_BIT))
-                if ((DMA_RX_COUNT > 0 ) && usart_no_error()) {
+                if ((DMA_RX_COUNT > 0) && usart_no_error()) {
                     uart_buf.length = DMA_RX_COUNT;
                     state = UART1_TX;
                 }
@@ -310,7 +270,7 @@ void uart1_task(void *params)
                 if (memcmp(uart_buf.data, BOOTLOADER_MAGIC, magic_len) == 0)
                     run_bootloader();
 
-            if (!handle_request())      /* handle modbus request */
+            if (!handle_request(modbus_slave, &msg))    /* handle modbus request */
                 state = UART1_RX;
 
             enable_tx_dma(uart_buf.length);

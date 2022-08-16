@@ -45,7 +45,7 @@
 #include "config.h"
 
 typedef bool boolean;
-extern uint8_t uip_notify_flag;
+extern uint8_t *uip_notify_flag;
 
 class Wiznet5500 {
 
@@ -125,7 +125,7 @@ class Wiznet5500 {
     inline void wizchip_cs_deselect() {
         while (SPI_SR(SPI1) & SPI_SR_BSY) {
             /* suspend task until SPI is not busy */
-            uip_notify_flag = 1;
+            *uip_notify_flag = 1;
             ulTaskNotifyTakeIndexed(0, pdTRUE, portMAX_DELAY);
         }
         gpio_set(GPIOA, GPIO4);
