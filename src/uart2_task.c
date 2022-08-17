@@ -69,7 +69,7 @@ const struct uarts uart = UART_3;
 #endif
 
 static struct {
-    char data[UART_BUF_LEN];
+    uint8_t data[UART_BUF_LEN];
     uint16_t length;
 } uart_buf;
 
@@ -296,8 +296,10 @@ void uart2_task(void *params)
             break;
 
         case UART2_TX:
-            if (!handle_request(modbus_slave, &msg))    /* handle modbus request */
+            if (!handle_request(modbus_slave, &msg)) {  /* handle modbus request */
                 state = UART2_RX;
+                break;
+            }
 
             enable_tx_dma(uart_buf.length);
 

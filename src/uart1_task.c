@@ -23,7 +23,7 @@
 #define DMA_TX_TC_BIT               0x04
 
 static struct {
-    char data[UART_BUF_LEN];
+    uint8_t data[UART_BUF_LEN];
     uint16_t length;
 } uart_buf;
 

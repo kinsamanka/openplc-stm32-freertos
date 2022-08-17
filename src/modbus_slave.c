@@ -13,6 +13,7 @@ extern uint8_t IX[];
 
 static ModbusErrorInfo mberr;
 static ModbusSlave status;
+static int err = 0;
 
 static SemaphoreHandle_t mutex;
 
@@ -142,6 +143,17 @@ static ModbusError regCallback(const ModbusSlave * slave,
     return MODBUS_OK;
 }
 
+static ModbusError exceptionCallback(const ModbusSlave * slave,
+                                     uint8_t function, ModbusExceptionCode code)
+{
+    (void) slave;
+    (void) function;
+    (void) code;
+
+    err = 1;
+    return MODBUS_OK;
+}
+
 static int handle_request(uint8_t * data, uint16_t * length, int rtu)
 {
     if (rtu) {
@@ -151,33 +163,19 @@ static int handle_request(uint8_t * data, uint16_t * length, int rtu)
         mberr = modbusParseRequestTCP(&status, (const uint8_t *)data, *length);
     }
 
-    switch (modbusGetGeneralError(mberr)) {
-    case MODBUS_OK:
-        break;
-
-    case MODBUS_ERROR_ALLOC:
-
-        if (*length < 2)
-            break;
-        mberr = modbusBuildExceptionRTU(&status,
-                                        SLAVE_ADDRESS,
-                                        data[1], MODBUS_EXCEP_SLAVE_FAILURE);
-        break;
-
-    default:
-        return 0;
-    }
-
     // return response if everything is OK
-    if (modbusIsOk(mberr) && modbusSlaveGetResponseLength(&status)) {
+    if (modbusIsOk(mberr)) {
 
-        uint16_t sz = modbusSlaveGetResponseLength(&status);
-        uint8_t *dat = (uint8_t *) modbusSlaveGetResponse(&status);
+        uint16_t sz;
+        /* no reply on broadcast messages */
+        if ((sz = modbusSlaveGetResponseLength(&status))) {
+            uint8_t *dat = (uint8_t *) modbusSlaveGetResponse(&status);
 
-        *length = sz;
-        memcpy(data, dat, sz);
+            *length = sz;
+            memcpy(data, dat, sz);
 
-        return 1;
+            return 1;
+        }
     }
 
     return 0;
@@ -190,7 +188,7 @@ void modbus_slave_task(void *params)
 
     mberr = modbusSlaveInit(&status,
                             regCallback,
-                            NULL,
+                            exceptionCallback,
                             staticAllocator,
                             modbusSlaveDefaultFunctions,
                             modbusSlaveDefaultFunctionCount);
@@ -202,8 +200,11 @@ void modbus_slave_task(void *params)
                                portMAX_DELAY);
 
         int rtu = msg->src != uip_task;
+
+        err = 0;
         uint32_t result = handle_request(msg->data, msg->length, rtu);
 
-        xTaskNotifyIndexed(msg->src, 1, result, eSetValueWithOverwrite);
+        xTaskNotifyIndexed(msg->src, 1, err ? 0 : result,
+                           eSetValueWithOverwrite);
     }
 }
