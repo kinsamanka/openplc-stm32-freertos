@@ -74,20 +74,20 @@ int main(void)
 
     uart1_setup();
     xTaskCreate(uart1_task, "uart1", configMINIMAL_STACK_SIZE * 2, &task_params,
-                tskIDLE_PRIORITY + 1, &task_params.uart1);
+                tskIDLE_PRIORITY + 2, &task_params.uart1);
 
 #if defined UART_2 || defined UART_3
     uart2_setup();
     xTaskCreate(uart2_task, "uart2", configMINIMAL_STACK_SIZE * 2, &task_params,
-                tskIDLE_PRIORITY + 1, &task_params.uart2);
+                tskIDLE_PRIORITY + 2, &task_params.uart2);
 #endif
 
     xTaskCreate(modbus_slave_task, "MBSlave", configMINIMAL_STACK_SIZE * 2,
-                &task_params, tskIDLE_PRIORITY + 1, &task_params.modbus_slave);
+                &task_params, tskIDLE_PRIORITY + 2, &task_params.modbus_slave);
 
-    /* PLC task has a higher priority */
+    /* PLC task has the highest priority */
     xTaskCreate(plc_task, "PLC", configMINIMAL_STACK_SIZE * 20, &task_params,
-                tskIDLE_PRIORITY + 2, NULL);
+                tskIDLE_PRIORITY + 3, NULL);
 
     vTaskStartScheduler();
 
