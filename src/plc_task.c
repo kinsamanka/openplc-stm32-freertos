@@ -24,16 +24,6 @@ extern uint8_t IX[];
 extern void config_init__(void);
 extern void config_run__(unsigned long);
 
-static void update_time(void)
-{
-    __CURRENT_TIME.tv_nsec += common_ticktime__;
-
-    if (__CURRENT_TIME.tv_nsec >= 1000000000) {
-        __CURRENT_TIME.tv_nsec -= 1000000000;
-        __CURRENT_TIME.tv_sec += 1;
-    }
-}
-
 void plc_task(void *params)
 {
     SemaphoreHandle_t mutex = ((struct task_parameters *)params)->mutex;
@@ -48,6 +38,8 @@ void plc_task(void *params)
     TickType_t last_tick = xTaskGetTickCount();
     TickType_t delay = (TickType_t) (common_ticktime__ / 1000000);
 
+    const TIME ticktime = {0, common_ticktime__};
+
     for (;;) {
         xSemaphoreTake(mutex, portMAX_DELAY);
 
@@ -57,7 +49,7 @@ void plc_task(void *params)
 
         xSemaphoreGive(mutex);
 
-        update_time();
+        __CURRENT_TIME = __time_add(__CURRENT_TIME, ticktime);
 
 #ifdef ANALOG_INPUTS
 	    adc_start();
