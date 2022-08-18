@@ -1,3 +1,4 @@
+from os import makedirs
 from pathlib import PureWindowsPath
 from shutil import rmtree
 from subprocess import check_output
@@ -69,7 +70,9 @@ env.AddBuildMiddleware(skip_from_build, "*")
 
 print("Compiling plc_prog.st ...")
 
-rmtree("src/generated/*", ignore_errors=True)
+gdir = f"{env['PROJECT_SRC_DIR']}/generated"
+rmtree(gdir, ignore_errors=True)
+makedirs(gdir, exist_ok=True)
 
 path = env.PioPlatform().get_package_dir("tool-matiec")
 cmd = "iec2c.exe" if platform.system() == "Windows" else "iec2c"
