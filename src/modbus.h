@@ -1,5 +1,5 @@
-#ifndef MODBUS_SLAVE_H
-#define MODBUS_SLAVE_H
+#ifndef MODBUS_H
+#define MODBUS_H
 
 #include <FreeRTOS.h>
 #include <semphr.h>

@@ -5,7 +5,7 @@
 #define ct_assert(e) ((void)sizeof(char[1 - 2*!(e)]))
 
 #ifndef MAX_REQUEST
-#if RAM_SIZE > 20480
+#if RAM_SIZE > 8192
 #define MAX_REQUEST             256
 #else
 #define MAX_REQUEST             64
@@ -13,7 +13,7 @@
 #endif
 
 #ifndef MAX_RESPONSE
-#if RAM_SIZE > 20480
+#if RAM_SIZE > 8192
 #define MAX_RESPONSE            256
 #else
 #define MAX_RESPONSE            64
@@ -34,6 +34,38 @@
 
 #ifndef DISCRETE_COUNT
 #define DISCRETE_COUNT          16
+#endif
+
+#ifndef SLAVE_HOLDING_REG_COUNT
+#define SLAVE_HOLDING_REG_COUNT 16
+#endif
+
+#ifndef SLAVE_INPUT_REG_COUNT
+#define SLAVE_INPUT_REG_COUNT   16
+#endif
+
+#ifndef SLAVE_COIL_COUNT
+#define SLAVE_COIL_COUNT        16
+#endif
+
+#ifndef SLAVE_DISCRETE_COUNT
+#define SLAVE_DISCRETE_COUNT    16
+#endif
+
+#ifdef MODBUS_MASTER
+
+#define QW_COUNT                (SLAVE_HOLDING_REG_COUNT + HOLDING_REG_COUNT)
+#define IW_COUNT                (SLAVE_INPUT_REG_COUNT + INPUT_REG_COUNT)
+#define QX_COUNT                (SLAVE_COIL_COUNT + COIL_COUNT)
+#define IX_COUNT                (SLAVE_DISCRETE_COUNT + DISCRETE_COUNT)
+
+#else
+
+#define QW_COUNT                HOLDING_REG_COUNT
+#define IW_COUNT                INPUT_REG_COUNT
+#define QX_COUNT                COIL_COUNT
+#define IX_COUNT                DISCRETE_COUNT
+
 #endif
 
 #ifndef SLAVE_ADDRESS

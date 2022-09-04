@@ -1,7 +1,7 @@
 #ifndef MODBUS_TCP_H
 #define MODBUS_TCP_H
 
-#include "modbus_slave.h"
+#include "modbus.h"
 #include "uipopt.h"
 
 typedef struct modbus_tcp_state {

@@ -1,4 +1,4 @@
-#include "modbus_slave.h"
+#include "modbus.h"
 #include "task_params.h"
 
 #define LIGHTMODBUS_IMPL
@@ -12,7 +12,7 @@ extern uint8_t QX[];
 extern uint8_t IX[];
 
 static ModbusErrorInfo mberr;
-static ModbusSlave status;
+static ModbusSlave slave;
 static int err = 0;
 
 static SemaphoreHandle_t mutex;
@@ -21,13 +21,13 @@ static ModbusError staticAllocator(ModbusBuffer * buffer, uint16_t size,
                                    void *context)
 {
     (void)context;
-    static uint8_t status_buf[MAX_RESPONSE];
+    static uint8_t slave_buf[MAX_RESPONSE];
 
     if (size != 0) {
         // Allocation reqest
         if (size <= MAX_RESPONSE) {
             // Allocation request is within bounds
-            buffer->data = status_buf;
+            buffer->data = slave_buf;
             return MODBUS_OK;
         } else {
             // Allocation error
@@ -55,19 +55,19 @@ static ModbusError regCallback(const ModbusSlave * slave,
         switch (args->type) {
 
         case MODBUS_HOLDING_REGISTER:
-            size = HOLDING_REG_COUNT;
+            size = QW_COUNT;
             break;
 
         case MODBUS_INPUT_REGISTER:
-            size = INPUT_REG_COUNT;
+            size = IW_COUNT;
             break;
 
         case MODBUS_COIL:
-            size = COIL_COUNT;
+            size = QX_COUNT;
             break;
 
         case MODBUS_DISCRETE_INPUT:
-            size = DISCRETE_COUNT;
+            size = IX_COUNT;
             break;
         }
 
@@ -81,11 +81,11 @@ static ModbusError regCallback(const ModbusSlave * slave,
         switch (args->type) {
 
         case MODBUS_HOLDING_REGISTER:
-            size = HOLDING_REG_COUNT;
+            size = QW_COUNT;
             break;
 
         case MODBUS_COIL:
-            size = COIL_COUNT;
+            size = QX_COUNT;
             break;
 
         default:
@@ -157,10 +157,10 @@ static ModbusError exceptionCallback(const ModbusSlave * slave,
 static int handle_request(uint8_t * data, uint16_t * length, int rtu)
 {
     if (rtu) {
-        mberr = modbusParseRequestRTU(&status, SLAVE_ADDRESS,
+        mberr = modbusParseRequestRTU(&slave, SLAVE_ADDRESS,
                                       (const uint8_t *)data, *length);
     } else {
-        mberr = modbusParseRequestTCP(&status, (const uint8_t *)data, *length);
+        mberr = modbusParseRequestTCP(&slave, (const uint8_t *)data, *length);
     }
 
     // return response if everything is OK
@@ -168,8 +168,8 @@ static int handle_request(uint8_t * data, uint16_t * length, int rtu)
 
         uint16_t sz;
         /* no reply on broadcast messages */
-        if ((sz = modbusSlaveGetResponseLength(&status))) {
-            uint8_t *dat = (uint8_t *) modbusSlaveGetResponse(&status);
+        if ((sz = modbusSlaveGetResponseLength(&slave))) {
+            uint8_t *dat = (uint8_t *) modbusSlaveGetResponse(&slave);
 
             *length = sz;
             memcpy(data, dat, sz);
@@ -186,7 +186,7 @@ void modbus_slave_task(void *params)
     mutex = ((struct task_parameters *)params)->mutex;
     TaskHandle_t uip_task = ((struct task_parameters *)params)->uip;
 
-    mberr = modbusSlaveInit(&status,
+    mberr = modbusSlaveInit(&slave,
                             regCallback,
                             exceptionCallback,
                             staticAllocator,

@@ -12,7 +12,7 @@
 #include "uart1_task.h"
 #include "uart2_task.h"
 #include "plc_task.h"
-#include "modbus_slave.h"
+#include "modbus.h"
 #include "task_params.h"
 
 struct task_parameters task_params;
