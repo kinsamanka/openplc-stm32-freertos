@@ -13,15 +13,16 @@ if "bootloader" not in env["PIOENV"]:
 else:
     start = 0x08000000
 
-l = env["UPLOADERFLAGS"]
-# update bootloader start
-l = list(map(lambda x: x.replace('0x08000000', hex(start)), l))
-# fix platformio bug
-l = list(map(lambda x: x.replace('-g', '-S'), l))
-l.insert(0, '-g')
-l.insert(1, '0')
+if (env['UPLOAD_PROTOCOL'] == 'serial') & ("bootloader" not in env["PIOENV"]):
+    l = env["UPLOADERFLAGS"]
+    # update bootloader start
+    l = list(map(lambda x: x.replace('0x08000000', hex(start)), l))
+    # fix platformio bug
+    l = list(map(lambda x: x.replace('-g', '-S'), l))
+    l.insert(0, '-g')
+    l.insert(1, '0')
 
-env["UPLOADERFLAGS"] = l
+    env["UPLOADERFLAGS"] = l
 
 def before_upload(source, target, env):
     if (env['UPLOAD_PROTOCOL'] == 'serial') & ("bootloader" not in env["PIOENV"]):
