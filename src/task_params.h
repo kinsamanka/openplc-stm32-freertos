@@ -4,19 +4,47 @@
 #include <FreeRTOS.h>
 #include <stdint.h>
 
+#define RESULT_TRUE                 0x0001
+#define RESULT_FALSE                0x0002
+
+#define USART1_IDLE_BIT             0x0004
+#define USART1_TC_BIT               0x0008
+#define DMA_RX1_TC_BIT              0x0010
+#define DMA_RX1_HT_BIT              0x0020
+#define RX1_UPDATE_BITS             (USART1_IDLE_BIT | DMA_RX1_TC_BIT | DMA_RX1_HT_BIT)
+
+#define USARTN_IDLE_BIT             0x0040
+#define USARTN_TC_BIT               0x0080
+#define DMA_RXN_TC_BIT              0x0100
+#define DMA_RXN_HT_BIT              0x0200
+#define RXN_UPDATE_BITS             (USARTN_IDLE_BIT | DMA_RXN_TC_BIT | DMA_RXN_HT_BIT)
+
+#define TCP_SRC                     0x0400
+#define USART1_SRC                  0x0800
+#define USARTN_SRC                  0x1000
+
+enum msg_sources {
+    UIP_TCP,
+    USART1_RTU,
+    USARTN_RTU,
+    NUM_SRCS
+};
+
 struct task_parameters {
     SemaphoreHandle_t mutex;
     TaskHandle_t uip;
-    TaskHandle_t uart1;
-    TaskHandle_t uart2;
+    TaskHandle_t uart;
     TaskHandle_t modbus_slave;
     uint8_t uip_notify_flag;
+    struct modbus_slave_msg *msgs;
 };
 
 struct modbus_slave_msg {
     uint8_t *data;
-    uint16_t *length;
+    size_t *length;
     TaskHandle_t src;
+    uint32_t src_bits;
+    uint8_t rtu_flag;
 };
 
 #endif

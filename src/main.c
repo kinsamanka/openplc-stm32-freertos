@@ -9,13 +9,13 @@
 #include "config.h"
 #include "hw.h"
 #include "uip_task.h"
-#include "uart1_task.h"
-#include "uart2_task.h"
+#include "uart_task.h"
 #include "plc_task.h"
 #include "modbus.h"
 #include "task_params.h"
 
-struct task_parameters task_params;
+static struct task_parameters task_params;
+static struct modbus_slave_msg msgs[NUM_SRCS];
 
 /******************************************************************************/
 
@@ -62,6 +62,7 @@ int main(void)
 #endif
 
     task_params.mutex = xSemaphoreCreateMutex();
+    task_params.msgs = msgs;
 
     xTaskCreate(blink_task, "Blink", configMINIMAL_STACK_SIZE, NULL,
                 tskIDLE_PRIORITY + 1, NULL);
@@ -71,18 +72,10 @@ int main(void)
     xTaskCreate(uip_task, "uIP", configMINIMAL_STACK_SIZE * 16, &task_params,
                 tskIDLE_PRIORITY + 1, &task_params.uip);
 #endif
+    xTaskCreate(uart_task, "uart", configMINIMAL_STACK_SIZE * 2, &task_params,
+                tskIDLE_PRIORITY + 2, &task_params.uart);
 
-    uart1_setup();
-    xTaskCreate(uart1_task, "uart1", configMINIMAL_STACK_SIZE * 2, &task_params,
-                tskIDLE_PRIORITY + 2, &task_params.uart1);
-
-#if defined UART_2 || defined UART_3
-    uart2_setup();
-    xTaskCreate(uart2_task, "uart2", configMINIMAL_STACK_SIZE * 2, &task_params,
-                tskIDLE_PRIORITY + 2, &task_params.uart2);
-#endif
-
-    xTaskCreate(modbus_slave_task, "MBSlave", configMINIMAL_STACK_SIZE * 2,
+    xTaskCreate(modbus_slave_task, "MBSlave", configMINIMAL_STACK_SIZE * 4,
                 &task_params, tskIDLE_PRIORITY + 2, &task_params.modbus_slave);
 
     /* PLC task has the highest priority */

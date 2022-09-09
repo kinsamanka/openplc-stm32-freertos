@@ -9,18 +9,17 @@ static TaskHandle_t modbus_slave;
 static TaskHandle_t notify;
 
 static struct modbus_tcp_state s;
+static struct modbus_slave_msg *msg;
 
-static int handle_request(TaskHandle_t mbs, struct modbus_slave_msg *msg)
+static int handle_request(void)
 {
     uint32_t result;
 
-    while (!xTaskNotifyIndexed
-           (mbs, 1, (uint32_t) msg, eSetValueWithoutOverwrite))
-        vTaskDelay(10);
+    xTaskNotify(modbus_slave, (uint32_t) 1 << UIP_TCP, eSetBits);
 
-    xTaskNotifyWaitIndexed(1, 0x00, 0xffffffff, &result, portMAX_DELAY);
+    xTaskNotifyWait(0, 0xffffffff, &result, portMAX_DELAY);
 
-    return result;
+    return ((result & RESULT_TRUE) != 0);
 }
 
 void modbus_tcp_init(void *params)
@@ -29,6 +28,14 @@ void modbus_tcp_init(void *params)
 
     modbus_slave = ((struct task_parameters *)params)->modbus_slave;
     notify = ((struct task_parameters *)params)->uip;
+    msg = &(((struct task_parameters *)params)->msgs[UIP_TCP]);
+    *msg = (struct modbus_slave_msg) {
+        .data = NULL,
+        .length = NULL,
+        .src = notify,
+        .src_bits = TCP_SRC,
+        .rtu_flag = 0,
+    };
 }
 
 void modbus_tcp_appcall(void)
@@ -43,16 +50,13 @@ void modbus_tcp_appcall(void)
         sz = uip_datalen();
         dat = uip_appdata;
 
-        struct modbus_slave_msg msg = {
-            s.data,
-            &s.len,
-            notify,
-        };
+        msg->data = s.data;
+        msg->length = &s.len;
 
         s.len = (sz < NUM(s.data)) ? sz : NUM(s.data);
         memcpy(s.data, dat, s.len);
 
-        if (!handle_request(modbus_slave, &msg))
+        if (!handle_request())
             s.len = 0;
     }
 

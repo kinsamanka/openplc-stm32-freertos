@@ -50,12 +50,12 @@ const struct leds run_led = RUN_LED;
 const struct leds err_led = ERR_LED;
 #endif
 
-const struct uarts uart1 = UART_1;
+static const struct uarts uart1 = UART_1;
 #ifdef UART_2
-const struct uarts uart2 = UART_2;
+static const struct uarts uart2 = UART_2;
 #endif
 #ifdef UART_3
-const struct uarts uart3 = UART_3;
+static const struct uarts uart3 = UART_3;
 #endif
 
 void update_inputs(void)

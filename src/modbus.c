@@ -181,10 +181,24 @@ static int handle_request(uint8_t * data, uint16_t * length, int rtu)
     return 0;
 }
 
+static void process_request(struct modbus_slave_msg *msg)
+{
+    err = 0;
+    uint32_t result = handle_request(msg->data, msg->length, msg->rtu_flag);
+
+    result =err ? RESULT_FALSE : (result ? RESULT_TRUE : RESULT_FALSE);
+    result |= msg->src_bits;
+
+    xTaskNotify(msg->src, result, eSetBits);
+}
+
 void modbus_slave_task(void *params)
 {
+    uint32_t src;
+    struct modbus_slave_msg *msgs;
+
+    msgs = ((struct task_parameters *)params)->msgs;
     mutex = ((struct task_parameters *)params)->mutex;
-    TaskHandle_t uip_task = ((struct task_parameters *)params)->uip;
 
     mberr = modbusSlaveInit(&slave,
                             regCallback,
@@ -193,18 +207,10 @@ void modbus_slave_task(void *params)
                             modbusSlaveDefaultFunctions,
                             modbusSlaveDefaultFunctionCount);
 
-    struct modbus_slave_msg *msg;
-
     for (;;) {
-        xTaskNotifyWaitIndexed(1, 0x00, 0xffffffff, (uint32_t *) & msg,
-                               portMAX_DELAY);
-
-        int rtu = msg->src != uip_task;
-
-        err = 0;
-        uint32_t result = handle_request(msg->data, msg->length, rtu);
-
-        xTaskNotifyIndexed(msg->src, 1, err ? 0 : result,
-                           eSetValueWithOverwrite);
+        xTaskNotifyWait(0, 0xffffffff, &src, portMAX_DELAY);
+        for (int i = 0; i < NUM_SRCS; i++)
+            if (src & (1 << i))
+                process_request(&msgs[i]);
     }
 }
