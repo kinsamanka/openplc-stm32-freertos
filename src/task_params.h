@@ -4,23 +4,20 @@
 #include <FreeRTOS.h>
 #include <stdint.h>
 
-#define RESULT_TRUE                 0x0001
-#define RESULT_FALSE                0x0002
-
-#define USART1_IDLE_BIT             0x0004
-#define USART1_TC_BIT               0x0008
-#define DMA_RX1_TC_BIT              0x0010
-#define DMA_RX1_HT_BIT              0x0020
+#define USART1_IDLE_BIT             0x0001
+#define USART1_TC_BIT               0x0002
+#define DMA_RX1_TC_BIT              0x0004
+#define DMA_RX1_HT_BIT              0x0008
 #define RX1_UPDATE_BITS             (USART1_IDLE_BIT | DMA_RX1_TC_BIT | DMA_RX1_HT_BIT)
 
-#define USARTN_IDLE_BIT             0x0040
-#define USARTN_TC_BIT               0x0080
-#define DMA_RXN_TC_BIT              0x0100
-#define DMA_RXN_HT_BIT              0x0200
+#define USARTN_IDLE_BIT             0x0010
+#define USARTN_TC_BIT               0x0020
+#define DMA_RXN_TC_BIT              0x0040
+#define DMA_RXN_HT_BIT              0x0080
 #define RXN_UPDATE_BITS             (USARTN_IDLE_BIT | DMA_RXN_TC_BIT | DMA_RXN_HT_BIT)
 
-#define TCP_SRC                     0x0400
-#define USART1_SRC                  0x0800
+#define TCP_SRC                     0x0100
+#define USART1_SRC                  0x0400
 #define USARTN_SRC                  0x1000
 
 enum msg_sources {

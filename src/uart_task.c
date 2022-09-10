@@ -418,8 +418,11 @@ static enum uart_state update_modbus_slave_state(int res,
 
     switch (state) {
     case STATE_RX:
-        if ((id ? USARTN_IDLE_BIT : USART1_IDLE_BIT) & state_bits)
+        if (((id ? USARTN_IDLE_BIT : USART1_IDLE_BIT) & state_bits)
+            && (id ? uartn_buf.len : uart1_buf.len)) {
+
             next_state = STATE_RX_DONE;
+        }
         break;
 
     case STATE_RX_DONE:
@@ -431,8 +434,14 @@ static enum uart_state update_modbus_slave_state(int res,
             if (!id) {
                 if (uart1_buf.len == magic_len)
                     if (memcmp(uart1_buf.data, BOOTLOADER_MAGIC,
-                               magic_len) == 0)
+                               magic_len) == 0) {
                         run_bootloader();
+                    }
+                usart_set_mode(USART1, USART_MODE_TX);
+#ifdef ENABLE_USARTN
+            } else {
+                usart_set_mode(_USARTN_, USART_MODE_TX);
+#endif
             }
 
             xTaskNotify(modbus_slave,
@@ -444,7 +453,7 @@ static enum uart_state update_modbus_slave_state(int res,
 
     case STATE_WAIT_TX:
         if ((id ? USARTN_SRC : USART1_SRC) & state_bits) {
-            if (RESULT_TRUE & state_bits) {
+            if (((id ? USARTN_SRC : USART1_SRC) << 1) & state_bits) {
                 if (!id) {
                     if (uart1.en.port)
                         gpio_set(uart1.en.port, uart1.en.pin);
@@ -458,6 +467,12 @@ static enum uart_state update_modbus_slave_state(int res,
                 }
                 next_state = STATE_WAIT_TX_DONE;
             } else {
+                if (!id)
+                    usart_set_mode(USART1, USART_MODE_TX_RX);
+#ifdef ENABLE_USARTN
+                else
+                    usart_set_mode(_USARTN_, USART_MODE_TX_RX);
+#endif
                 next_state = STATE_RX;
             }
             if (!id)
@@ -472,10 +487,12 @@ static enum uart_state update_modbus_slave_state(int res,
     case STATE_WAIT_TX_DONE:
         if ((id ? USARTN_TC_BIT : USART1_TC_BIT) & state_bits) {
             if (!id) {
+                usart_set_mode(USART1, USART_MODE_TX_RX);
                 if (uart1.en.port)
                     gpio_clear(uart1.en.port, uart1.en.pin);
 #ifdef ENABLE_USARTN
             } else {
+                usart_set_mode(_USARTN_, USART_MODE_TX_RX);
                 if (uartn.en.port)
                     gpio_clear(uartn.en.port, uartn.en.pin);
 #endif

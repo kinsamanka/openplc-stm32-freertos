@@ -19,7 +19,7 @@ static int handle_request(void)
 
     xTaskNotifyWait(0, 0xffffffff, &result, portMAX_DELAY);
 
-    return ((result & RESULT_TRUE) != 0);
+    return ((result & (TCP_SRC << 1)) != 0);
 }
 
 void modbus_tcp_init(void *params)

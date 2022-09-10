@@ -163,7 +163,6 @@ static int handle_request(uint8_t * data, uint16_t * length, int rtu)
         mberr = modbusParseRequestTCP(&slave, (const uint8_t *)data, *length);
     }
 
-    // return response if everything is OK
     if (modbusIsOk(mberr)) {
 
         uint16_t sz;
@@ -186,7 +185,12 @@ static void process_request(struct modbus_slave_msg *msg)
     err = 0;
     uint32_t result = handle_request(msg->data, msg->length, msg->rtu_flag);
 
-    result =err ? RESULT_FALSE : (result ? RESULT_TRUE : RESULT_FALSE);
+    if (err)
+        result = 0;
+
+    if (result != 0)
+        result = msg->src_bits << 1;
+
     result |= msg->src_bits;
 
     xTaskNotify(msg->src, result, eSetBits);
