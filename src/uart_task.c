@@ -302,26 +302,7 @@ void _USARTN_ISR_(void)
 
     portYIELD_FROM_ISR(y);
 }
-
-static int usartn_no_error(void)
-{
-    if ((usart_get_flag(_USARTN_, USART_FLAG_PE) != 0) ||
-        (usart_get_flag(_USARTN_, USART_FLAG_FE) != 0)) {
-        return 0;
-    } else {
-        return 1;
-    }
-}
 #endif
-static int usart1_no_error(void)
-{
-    if ((usart_get_flag(USART1, USART_FLAG_PE) != 0) ||
-        (usart_get_flag(USART1, USART_FLAG_FE) != 0)) {
-        return 0;
-    } else {
-        return 1;
-    }
-}
 
 static void uart_setup_helper(uint32_t usart, uint8_t irqn)
 {
