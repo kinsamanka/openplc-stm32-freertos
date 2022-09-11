@@ -50,13 +50,12 @@ const struct leds run_led = RUN_LED;
 const struct leds err_led = ERR_LED;
 #endif
 
-static const struct uarts uart1 = UART_1;
+const struct uarts uart[] = {
+    UART_1,
 #ifdef UART_2
-static const struct uarts uart2 = UART_2;
+    UART_2,
 #endif
-#ifdef UART_3
-static const struct uarts uart3 = UART_3;
-#endif
+};
 
 void update_inputs(void)
 {
@@ -232,10 +231,10 @@ void clock_setup(void)
 #endif
     rcc_periph_clock_enable(RCC_USART1);
 #ifdef UART_2
-    rcc_periph_clock_enable(RCC_USART2);
-#endif
-#ifdef UART_3
-    rcc_periph_clock_enable(RCC_USART3);
+    if (uart[1].index == 1)
+        rcc_periph_clock_enable(RCC_USART2);
+    else
+        rcc_periph_clock_enable(RCC_USART3);
 #endif
     rcc_periph_clock_enable(RCC_SPI1);
     rcc_periph_clock_enable(RCC_DMA1);
@@ -257,10 +256,7 @@ void gpio_setup(void)
 
     uint32_t remaps = 0;
 #ifdef UART_2
-    remaps |= uart2.remaps;
-#endif
-#ifdef UART_3
-    remaps |= uart3.remaps;
+    remaps |= uart[1].remaps;
 #endif
     gpio_primary_remap(AFIO_MAPR_SWJ_CFG_JTAG_OFF_SW_OFF, remaps);
 
@@ -268,10 +264,7 @@ void gpio_setup(void)
 
     uint32_t remaps = 0;
 #ifdef UART_2
-    remaps |= uart2.remaps;
-#endif
-#ifdef UART_3
-    remaps |= uart3.remaps;
+    remaps |= uart[1].remaps;
 #endif
     gpio_primary_remap(0, remaps);
 #endif
@@ -303,14 +296,8 @@ void gpio_setup(void)
     for (unsigned i = 0; i < NUM(aout); i++)
         gpio_mode_analog_out(aout[i]);
 #endif
-
-    uart_set_gpio(uart1);
-#ifdef UART_2
-    uart_set_gpio(uart2);
-#endif
-#ifdef UART_3
-    uart_set_gpio(uart3);
-#endif
+    for (unsigned i = 0; i < NUM(uart); i++)
+        uart_set_gpio(uart[i]);
 
 #ifdef USE_SPI
     spi_set_gpio();

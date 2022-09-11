@@ -11,6 +11,6 @@
 #define UART_BUF_LEN    MAX_RESPONSE
 #endif
 
-void uart_task(void *);
+void uart_task(void *params);
 
 #endif

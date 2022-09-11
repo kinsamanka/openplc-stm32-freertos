@@ -41,11 +41,11 @@ static ModbusError staticAllocator(ModbusBuffer * buffer, uint16_t size,
     }
 }
 
-static ModbusError regCallback(const ModbusSlave * slave,
+static ModbusError regCallback(const ModbusSlave * status,
                                const ModbusRegisterCallbackArgs * args,
                                ModbusRegisterCallbackResult * result)
 {
-    (void)slave;
+    (void)status;
 
     int size = 0;
 
@@ -143,10 +143,10 @@ static ModbusError regCallback(const ModbusSlave * slave,
     return MODBUS_OK;
 }
 
-static ModbusError exceptionCallback(const ModbusSlave * slave,
+static ModbusError exceptionCallback(const ModbusSlave * status,
                                      uint8_t function, ModbusExceptionCode code)
 {
-    (void) slave;
+    (void) status;
     (void) function;
     (void) code;
 
@@ -154,7 +154,7 @@ static ModbusError exceptionCallback(const ModbusSlave * slave,
     return MODBUS_OK;
 }
 
-static int handle_request(uint8_t * data, uint16_t * length, int rtu)
+static int handle_request(uint8_t * data, size_t * length, int rtu)
 {
     if (rtu) {
         mberr = modbusParseRequestRTU(&slave, SLAVE_ADDRESS,

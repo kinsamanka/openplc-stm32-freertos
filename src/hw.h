@@ -18,6 +18,7 @@ struct leds {
 };
 
 struct uarts {
+    const uint8_t index;
     const uint32_t port;
     const uint16_t rx;
     const uint16_t tx;

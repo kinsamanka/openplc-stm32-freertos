@@ -64,7 +64,8 @@
 
 #define DAC_CHANNELS            { 0, 1 }
 
-#define UART_3                  { \
+#define UART_2                  { \
+                                  2, \
                                   GPIOC, \
                                   GPIO11,            /* rs485 rx */ \
                                   GPIO10,            /* rs485 tx */ \
@@ -119,6 +120,7 @@
 #define TIMER_OC_IDS            { TIM_OC1 }
 
 #define UART_1                  { \
+                                  0, \
                                   GPIOA, \
                                   GPIO10,           /* rx    */ \
                                   GPIO9 ,           /* tx    */ \
@@ -194,6 +196,7 @@
                                 }
 
 #define UART_2                  { \
+                                  1, \
                                   GPIOA, \
                                   GPIO3,            /* rs485 rx */ \
                                   GPIO2,            /* rs485 tx */ \
@@ -209,6 +212,7 @@
 
 #ifndef UART_1
 #define UART_1                  { \
+                                  0, \
                                   GPIOA, \
                                   GPIO10,           /* rx    */ \
                                   GPIO9 ,           /* tx    */ \
