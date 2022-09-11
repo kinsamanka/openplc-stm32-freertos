@@ -23,19 +23,33 @@
 #include "uart_task.h"
 
 const uint32_t usart[] = { USART1, USART2, USART3 };
+
+#ifdef STM32F1
 const uint8_t dma_rx_chan[] = { DMA_CHANNEL5, DMA_CHANNEL6, DMA_CHANNEL3 };
 const uint8_t dma_tx_chan[] = { DMA_CHANNEL4, DMA_CHANNEL7, DMA_CHANNEL2 };
 
-#ifdef STM32F1
-const uint8_t dma_rx_irq[] =
-    { NVIC_DMA1_CHANNEL5_IRQ, NVIC_DMA1_CHANNEL6_IRQ, NVIC_DMA1_CHANNEL3_IRQ };
-const uint8_t dma_tx_irq[] =
-    { NVIC_DMA1_CHANNEL4_IRQ, NVIC_DMA1_CHANNEL7_IRQ, NVIC_DMA1_CHANNEL2_IRQ };
-const uint8_t usart_irq[] =
-    { NVIC_USART1_IRQ, NVIC_USART2_IRQ, NVIC_USART3_IRQ };
+const uint8_t dma_rx_irq[] = {
+    NVIC_DMA1_CHANNEL5_IRQ, NVIC_DMA1_CHANNEL6_IRQ, NVIC_DMA1_CHANNEL3_IRQ
+};
+
+const uint8_t dma_tx_irq[] = {
+    NVIC_DMA1_CHANNEL4_IRQ, NVIC_DMA1_CHANNEL7_IRQ, NVIC_DMA1_CHANNEL2_IRQ
+};
+
+const uint8_t usart_irq[] = {
+    NVIC_USART1_IRQ, NVIC_USART2_IRQ, NVIC_USART3_IRQ
+};
+
 #else
-const uint8_t dma_rx_irq[] = { NVIC_DMA1_CHANNEL4_7_DMA2_CHANNEL3_5_IRQ };
-const uint8_t usart_irq[] = { NVIC_USART1_IRQ };
+const uint8_t dma_rx_chan[] = { DMA_CHANNEL3, DMA_CHANNEL5 };
+const uint8_t dma_tx_chan[] = { DMA_CHANNEL2, DMA_CHANNEL4 };
+
+const uint8_t dma_rx_irq[] = {
+    NVIC_DMA1_CHANNEL2_3_DMA2_CHANNEL1_2_IRQ,
+    NVIC_DMA1_CHANNEL4_7_DMA2_CHANNEL3_5_IRQ
+};
+
+const uint8_t usart_irq[] = { NVIC_USART1_IRQ, NVIC_USART2_IRQ };
 #endif
 
 #ifdef STM32F1
@@ -50,15 +64,10 @@ const uint8_t usart_irq[] = { NVIC_USART1_IRQ };
 
 extern const struct uarts uart[];
 
-#if defined STM32F1 && defined UART_2
-
-#define ENABLE_USART2
+#if defined UART_2
 #define UART_NUM                    2
-
 #else
-
 #define UART_NUM                    1
-
 #endif
 
 #define UART_TICK_DELAY             10
@@ -109,12 +118,22 @@ static inline portBASE_TYPE dma_tx_isr(int j)
 }
 
 #ifdef STM32F0
-void dma1_channel4_7_dma2_channel3_5_isr(void)
+void dma1_channel2_3_dma2_channel1_2_isr(void)
 {
     portBASE_TYPE y = pdFALSE;
 
     y |= dma_rx_isr(0);
     y |= dma_tx_isr(0);
+
+    portYIELD_FROM_ISR(y);
+}
+
+void dma1_channel4_7_dma2_channel3_5_isr(void)
+{
+    portBASE_TYPE y = pdFALSE;
+
+    y |= dma_rx_isr(1);
+    y |= dma_tx_isr(1);
 
     portYIELD_FROM_ISR(y);
 }
@@ -194,11 +213,7 @@ static void dma_setup_tx_helper(int n, uint16_t num, uint32_t prio)
 static void dma_setup(int n)
 {
     int j = uart[n].index;
-#ifdef STM32F0
-    /* remap RX/TX DMA */
-    SYSCFG_CFGR1 |= SYSCFG_CFGR1_USART1_RX_DMA_RMP;
-    SYSCFG_CFGR1 |= SYSCFG_CFGR1_USART1_TX_DMA_RMP;
-#endif
+
     /* USART1 RX DMA channel */
     dma_setup_rx_helper(n, CIRC_BUF_LEN, DMA_CCR_PL_HIGH);
 
@@ -241,7 +256,7 @@ static inline portBASE_TYPE usart_isr(int j)
 #ifdef STM32F1
         USART_SR(usart[j]) &= ~USART_FLAG_TC;   /* clear TC flag */
 #else
-        USART_ICR(usart[j]) &= USART_ICR_TCCF;
+        USART_ICR(usart[j]) |= USART_ICR_TCCF;
 #endif
         xTaskNotifyFromISR(notify, j ? USART2_TC_BIT : USART1_TC_BIT, eSetBits,
                            &y);
@@ -255,12 +270,12 @@ void usart1_isr(void)
     portYIELD_FROM_ISR(usart_isr(0));
 }
 
-#ifdef STM32F1
 void usart2_isr(void)
 {
     portYIELD_FROM_ISR(usart_isr(1));
 }
 
+#ifdef STM32F1
 void usart3_isr(void)
 {
     portYIELD_FROM_ISR(usart_isr(2));
@@ -283,7 +298,7 @@ static void uart_setup_helper(uint32_t usartn, uint8_t irqn)
     usart_set_flow_control(usartn, USART_FLOWCONTROL_NONE);
 #ifdef STM32F0
     /* disable rx overrun */
-    USART_CR3(USART1) |= USART_CR3_OVRDIS;
+    USART_CR3(usartn) |= USART_CR3_OVRDIS;
 #endif
     /* enable IDLE and TX Complete interrupt */
     USART_CR1(usartn) |= USART_CR1_IDLEIE | USART_CR1_TCIE;
@@ -441,8 +456,8 @@ void uart_task(void *params)
 
     for (int i = 0; i < UART_NUM; i++) {
         uart_msg[i] =
-            &(((struct task_parameters *)params)->
-              msgs[i ? USART2_RTU : USART1_RTU]);
+            &(((struct task_parameters *)params)->msgs[i ? USART2_RTU :
+                                                       USART1_RTU]);
         *uart_msg[i] = (struct modbus_slave_msg) {
             .data = uart_buf[i].data,
             .length = &uart_buf[i].len,
