@@ -15,7 +15,7 @@
 #include "task_params.h"
 
 static struct task_parameters task_params;
-static struct modbus_slave_msg msgs[NUM_SRCS];
+static struct modbus_msg msgs[NUM_SRCS];
 
 /******************************************************************************/
 
@@ -75,8 +75,8 @@ int main(void)
     xTaskCreate(uart_task, "uart", configMINIMAL_STACK_SIZE * 2, &task_params,
                 tskIDLE_PRIORITY + 2, &task_params.uart);
 
-    xTaskCreate(modbus_slave_task, "MBSlave", configMINIMAL_STACK_SIZE * 4,
-                &task_params, tskIDLE_PRIORITY + 2, &task_params.modbus_slave);
+    xTaskCreate(modbus_task, "modbus", configMINIMAL_STACK_SIZE * 4,
+                &task_params, tskIDLE_PRIORITY + 2, &task_params.modbus);
 
     /* PLC task has the highest priority */
     xTaskCreate(plc_task, "PLC", configMINIMAL_STACK_SIZE * 20, &task_params,

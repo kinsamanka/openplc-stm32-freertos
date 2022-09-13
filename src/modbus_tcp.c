@@ -5,17 +5,17 @@
 
 #include <string.h>
 
-static TaskHandle_t modbus_slave;
+static TaskHandle_t modbus;
 static TaskHandle_t notify;
 
 static struct modbus_tcp_state s;
-static struct modbus_slave_msg *msg;
+static struct modbus_msg *msg;
 
 static int handle_request(void)
 {
     uint32_t result;
 
-    xTaskNotify(modbus_slave, (uint32_t) 1 << UIP_TCP, eSetBits);
+    xTaskNotify(modbus, (uint32_t) 1 << UIP_TCP, eSetBits);
 
     xTaskNotifyWait(0, 0xffffffff, &result, portMAX_DELAY);
 
@@ -26,10 +26,10 @@ void modbus_tcp_init(void *params)
 {
     uip_listen(HTONS(configMODBUS_PORT));
 
-    modbus_slave = ((struct task_parameters *)params)->modbus_slave;
+    modbus = ((struct task_parameters *)params)->modbus;
     notify = ((struct task_parameters *)params)->uip;
     msg = &(((struct task_parameters *)params)->msgs[UIP_TCP]);
-    *msg = (struct modbus_slave_msg) {
+    *msg = (struct modbus_msg) {
         .data = NULL,
         .length = NULL,
         .src = notify,

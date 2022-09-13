@@ -5,22 +5,6 @@
 #define NORM(x, y)                  ((x >= 100) ? (x - 100 + y) : x)
 #define CHECK_BOUNDS(z, a, b, c)    enum { var##c = 1/(!!(a < b)) }
 
-#ifdef MODBUS_MASTER
-
-#define QW_BASE     HOLDING_REG_COUNT
-#define IW_BASE     INPUT_REG_COUNT
-#define QX_BASE     (COIL_COUNT / 8)
-#define IX_BASE     (DISCRETE_COUNT / 8)
-
-#else
-
-#define QW_BASE     0
-#define IW_BASE     0
-#define QX_BASE     0
-#define IX_BASE     0
-
-#endif
-
 #define ALLOC_QX(type, name, x, y) \
     CHECK_BOUNDS("error: Address exceeded COIL COUNT", \
             BIT_POS(NORM(x, QX_BASE), y), QX_COUNT, name); \

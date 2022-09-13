@@ -27,6 +27,7 @@ extern void config_run__(unsigned long);
 void plc_task(void *params)
 {
     SemaphoreHandle_t mutex = ((struct task_parameters *)params)->mutex;
+    TaskHandle_t modbus = ((struct task_parameters *)params)->modbus;
 
     memset(QW, 0, HOLDING_REG_COUNT * sizeof(uint16_t));
     memset(IW, 0, INPUT_REG_COUNT * sizeof(uint16_t));
@@ -54,6 +55,9 @@ void plc_task(void *params)
 #ifdef ANALOG_INPUTS
 	    adc_start();
 #endif
+        if (MODBUS_MASTER)
+            xTaskNotify(modbus, MODBUS_MASTER_TRIGGER, eSetBits);
+
         vTaskDelayUntil(&last_tick, delay / portTICK_RATE_MS);
     }
 }

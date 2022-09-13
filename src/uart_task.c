@@ -70,7 +70,14 @@ extern const struct uarts uart[];
 #define UART_NUM                    1
 #endif
 
+#ifndef UART_TICK_DELAY
 #define UART_TICK_DELAY             10
+#endif
+
+#ifndef UART_RX_TIMEOUT
+#define UART_RX_TIMEOUT             25
+#endif
+
 #define IRQ_TASK_PRIORITY           (configMAX_SYSCALL_INTERRUPT_PRIORITY + 1)
 
 static struct circ_buffer {
@@ -84,7 +91,7 @@ static struct buffer {
 } uart_buf[UART_NUM];
 
 static TaskHandle_t notify;
-static TaskHandle_t modbus_slave;
+static TaskHandle_t modbus;
 
 static inline portBASE_TYPE dma_rx_isr(int j)
 {
@@ -293,7 +300,7 @@ static void uart_setup_helper(uint32_t usartn, uint8_t irqn)
         usart_set_stopbits(usartn, USART_STOPBITS_1);
     }
     usart_set_baudrate(usartn, SLAVE_BAUD_RATE);
-    usart_set_mode(usartn, USART_MODE_TX_RX);
+    usart_set_mode(usartn, USART_MODE_TX);
     usart_set_parity(usartn, SLAVE_PARITY);
     usart_set_flow_control(usartn, USART_FLOWCONTROL_NONE);
 #ifdef STM32F0
@@ -326,8 +333,11 @@ static void uart_setup(void)
         int j = uart[i].index;
         uart_setup_helper(usart[j], usart_irq[j]);
         dma_setup(i);
+        if (MODBUS_MASTER && i)
+            usart_set_mode(usart[j], USART_MODE_TX);
+        else
+            usart_set_mode(usart[j], USART_MODE_TX_RX);
     }
-
 }
 
 static void update_buf(struct buffer *dbuf, uint8_t * src, size_t size)
@@ -382,8 +392,8 @@ enum uart_state {
     STATE_WAIT_TX_DONE,
 };
 
-static enum uart_state update_modbus_slave_state(int res, enum uart_state state,
-                                                 uint32_t state_bits, int n)
+static int modbus_slave_state(int timeout, enum uart_state state,
+                              uint32_t status, int n)
 {
     int j = uart[n].index;
     struct buffer *buf = &uart_buf[n];
@@ -392,39 +402,42 @@ static enum uart_state update_modbus_slave_state(int res, enum uart_state state,
 
     switch (state) {
     case STATE_RX:
-        if (((n ? USART2_IDLE_BIT : USART1_IDLE_BIT) & state_bits)
-            && buf->len) {
+        if (((n ? USART2_IDLE_BIT : USART1_IDLE_BIT) & status) && buf->len)
 
             next_state = STATE_RX_DONE;
-        }
+
         break;
 
     case STATE_RX_DONE:
-        if ((n ? RX2_UPDATE_BITS : RX1_UPDATE_BITS) & state_bits) {
+        if ((n ? RX2_UPDATE_BITS : RX1_UPDATE_BITS) & status) {
+
             next_state = STATE_RX;
-            break;
-        }
-        if (!res) {
+
+        } else if (timeout) {
+
             if (!n && (buf->len == magic_len))
                 if (memcmp(buf->data, BOOTLOADER_MAGIC, magic_len) == 0)
                     run_bootloader();
 
             usart_set_mode(usart[j], USART_MODE_TX);
-            xTaskNotify(modbus_slave,
-                        (uint32_t) 1 << (n ? USART2_RTU : USART1_RTU),
+            xTaskNotify(modbus, (uint32_t) 1 << (n ? USART2_RTU : USART1_RTU),
                         eSetBits);
+
             next_state = STATE_WAIT_TX;
         }
         break;
 
     case STATE_WAIT_TX:
-        if ((n ? USART2_SRC : USART1_SRC) & state_bits) {
-            if (((n ? USART2_SRC : USART1_SRC) << 1) & state_bits) {
+        if ((n ? USART2_SRC : USART1_SRC) & status) {
+            if (((n ? USART2_SRC : USART1_SRC) << 1) & status) {
                 enable_tx(n, 1);
                 enable_tx_dma(n, buf->len);
+
                 next_state = STATE_WAIT_TX_DONE;
+
             } else {
                 usart_set_mode(usart[j], USART_MODE_TX_RX);
+
                 next_state = STATE_RX;
             }
             buf->len = 0;
@@ -432,10 +445,85 @@ static enum uart_state update_modbus_slave_state(int res, enum uart_state state,
         break;
 
     case STATE_WAIT_TX_DONE:
-        if ((n ? USART2_TC_BIT : USART1_TC_BIT) & state_bits) {
+        if ((n ? USART2_TC_BIT : USART1_TC_BIT) & status) {
             usart_set_mode(usart[j], USART_MODE_TX_RX);
             enable_tx(n, 0);
+
             next_state = STATE_RX;
+        }
+        break;
+    }
+
+    return next_state;
+}
+
+static int modbus_master_state(int timeout, enum uart_state state,
+                               uint32_t status, int n)
+{
+    int j = uart[n].index;
+    struct buffer *buf = &uart_buf[n];
+    enum uart_state next_state = state;
+
+    static uint8_t rx_timeout[UART_NUM];
+    uint32_t src = 1 << ((n ? USART2_RTU : USART1_RTU) + NUM_SRCS);
+
+    switch (state) {
+    case STATE_WAIT_TX:
+        if ((n ? USART2_SRC : USART1_SRC) & status) {
+            if (buf->len) {
+                enable_tx(n, 1);
+                enable_tx_dma(n, buf->len);
+                buf->len = 0;
+
+                next_state = STATE_WAIT_TX_DONE;
+            } else {
+                /* skip TX */
+                rx_timeout[n] = UART_RX_TIMEOUT;
+
+                next_state = STATE_RX;
+            }
+        }
+        break;
+
+    case STATE_WAIT_TX_DONE:
+        if ((n ? USART2_TC_BIT : USART1_TC_BIT) & status) {
+            usart_set_mode(usart[j], USART_MODE_TX_RX);
+            enable_tx(n, 0);
+            rx_timeout[n] = 0;
+
+            next_state = STATE_RX;
+        }
+        break;
+
+    case STATE_RX:
+        if (((n ? USART2_IDLE_BIT : USART1_IDLE_BIT) & status) && buf->len) {
+
+            next_state = STATE_RX_DONE;
+
+        } else if (timeout) {
+            /* check rx timeouts */
+            if (rx_timeout[n]++ > UART_RX_TIMEOUT) {
+                usart_set_mode(usart[j], USART_MODE_TX);
+                buf->len = 0;
+                xTaskNotify(modbus, src, eSetBits);
+
+                next_state = STATE_WAIT_TX;
+            }
+        }
+        break;
+
+    case STATE_RX_DONE:
+        if ((n ? RX2_UPDATE_BITS : RX1_UPDATE_BITS) & status) {
+            rx_timeout[n] = 0;
+
+            next_state = STATE_RX;
+
+        } else if (timeout) {
+
+            usart_set_mode(usart[j], USART_MODE_TX);
+            xTaskNotify(modbus, src, eSetBits);
+
+            next_state = STATE_WAIT_TX;
         }
         break;
     }
@@ -445,12 +533,12 @@ static enum uart_state update_modbus_slave_state(int res, enum uart_state state,
 
 void uart_task(void *params)
 {
-    uint32_t state_bits;
-    enum uart_state usart_state[UART_NUM];
-    struct modbus_slave_msg *uart_msg[UART_NUM];
+    uint32_t status;
+    enum uart_state state[UART_NUM];
+    struct modbus_msg *uart_msg[UART_NUM];
 
     notify = ((struct task_parameters *)params)->uart;
-    modbus_slave = ((struct task_parameters *)params)->modbus_slave;
+    modbus = ((struct task_parameters *)params)->modbus;
 
     uart_setup();
 
@@ -458,25 +546,32 @@ void uart_task(void *params)
         uart_msg[i] =
             &(((struct task_parameters *)params)->msgs[i ? USART2_RTU :
                                                        USART1_RTU]);
-        *uart_msg[i] = (struct modbus_slave_msg) {
+        *uart_msg[i] = (struct modbus_msg) {
             .data = uart_buf[i].data,
             .length = &uart_buf[i].len,
             .src = notify,
             .src_bits = i ? USART2_SRC : USART1_SRC,
             .rtu_flag = 1,
         };
-        usart_state[i] = STATE_RX;
+
+        if (MODBUS_MASTER && (i == MODBUS_MASTER_USART))
+            state[i] = STATE_WAIT_TX;
+        else
+            state[i] = STATE_RX;
     }
 
     for (;;) {
 
-        int res = xTaskNotifyWait(0, 0xffffffff, &state_bits, UART_TICK_DELAY);
+        int res = xTaskNotifyWait(0, 0xffffffff, &status, UART_TICK_DELAY);
 
         for (int i = 0; i < UART_NUM; i++) {
-            if (state_bits & (i ? RX2_UPDATE_BITS : RX1_UPDATE_BITS))
+            if (status & (i ? RX2_UPDATE_BITS : RX1_UPDATE_BITS))
                 rx_check(i);
-            usart_state[i] =
-                update_modbus_slave_state(res, usart_state[i], state_bits, i);
+
+            if (MODBUS_MASTER && (i == MODBUS_MASTER_USART))
+                state[i] = modbus_master_state(!res, state[i], status, i);
+            else
+                state[i] = modbus_slave_state(!res, state[i], status, i);
         }
     }
 }

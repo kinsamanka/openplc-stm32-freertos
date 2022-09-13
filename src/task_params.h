@@ -20,6 +20,8 @@
 #define USART1_SRC                  0x0400
 #define USART2_SRC                  0x1000
 
+#define MODBUS_MASTER_TRIGGER       0x4000
+
 enum msg_sources {
     UIP_TCP,
     USART1_RTU,
@@ -27,16 +29,20 @@ enum msg_sources {
     NUM_SRCS
 };
 
+#define MODBUS_MASTER_SRC           USART2_RTU
+#define MODBUS_MASTER_MSG           (1 << (MODBUS_MASTER_SRC + NUM_SRCS))
+#define MODBUS_MASTER_USART         1
+
 struct task_parameters {
     SemaphoreHandle_t mutex;
     TaskHandle_t uip;
     TaskHandle_t uart;
-    TaskHandle_t modbus_slave;
+    TaskHandle_t modbus;
     uint8_t uip_notify_flag;
-    struct modbus_slave_msg *msgs;
+    struct modbus_msg *msgs;
 };
 
-struct modbus_slave_msg {
+struct modbus_msg {
     uint8_t *data;
     size_t *length;
     TaskHandle_t src;

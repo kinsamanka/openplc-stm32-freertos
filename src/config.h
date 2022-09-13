@@ -36,6 +36,11 @@
 #define DISCRETE_COUNT          16
 #endif
 
+#ifdef MODBUS_MASTER
+
+#undef MODBUS_MASTER
+#define MODBUS_MASTER           1
+
 #ifndef SLAVE_HOLDING_REG_COUNT
 #define SLAVE_HOLDING_REG_COUNT 16
 #endif
@@ -52,21 +57,47 @@
 #define SLAVE_DISCRETE_COUNT    16
 #endif
 
-#ifdef MODBUS_MASTER
-
-#define QW_COUNT                (SLAVE_HOLDING_REG_COUNT + HOLDING_REG_COUNT)
-#define IW_COUNT                (SLAVE_INPUT_REG_COUNT + INPUT_REG_COUNT)
-#define QX_COUNT                (SLAVE_COIL_COUNT + COIL_COUNT)
-#define IX_COUNT                (SLAVE_DISCRETE_COUNT + DISCRETE_COUNT)
+#define QW_BASE                 HOLDING_REG_COUNT
+#define IW_BASE                 INPUT_REG_COUNT
+#define QX_BASE                 (COIL_COUNT / 8)
+#define IX_BASE                 (DISCRETE_COUNT / 8)
 
 #else
 
-#define QW_COUNT                HOLDING_REG_COUNT
-#define IW_COUNT                INPUT_REG_COUNT
-#define QX_COUNT                COIL_COUNT
-#define IX_COUNT                DISCRETE_COUNT
+#define MODBUS_MASTER           0
+
+#ifdef SLAVE_HOLDING_REG_COUNT
+#undef SLAVE_HOLDING_REG_COUNT
+#endif
+
+#ifdef SLAVE_INPUT_REG_COUNT
+#undef SLAVE_INPUT_REG_COUNT
+#endif
+
+#ifdef SLAVE_COIL_COUNT
+#undef SLAVE_COIL_COUNT
+#endif
+
+#ifdef SLAVE_DISCRETE_COUNT
+#undef SLAVE_DISCRETE_COUNT
+#endif
+
+#define SLAVE_HOLDING_REG_COUNT 0
+#define SLAVE_INPUT_REG_COUNT   0
+#define SLAVE_COIL_COUNT        0
+#define SLAVE_DISCRETE_COUNT    0
+
+#define QW_BASE                 0
+#define IW_BASE                 0
+#define QX_BASE                 0
+#define IX_BASE                 0
 
 #endif
+
+#define QW_COUNT                (HOLDING_REG_COUNT + SLAVE_HOLDING_REG_COUNT)
+#define IW_COUNT                (INPUT_REG_COUNT + SLAVE_INPUT_REG_COUNT)
+#define QX_COUNT                (COIL_COUNT + SLAVE_COIL_COUNT)
+#define IX_COUNT                (DISCRETE_COUNT + SLAVE_DISCRETE_COUNT)
 
 #ifndef SLAVE_ADDRESS
 #define SLAVE_ADDRESS           1
