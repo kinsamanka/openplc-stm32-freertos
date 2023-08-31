@@ -65,8 +65,14 @@ def skip_from_build(node):
     # otherwise allow all
     return node
 
-# Register callback
+def fix_pous_c(node):
+    # don't compile POUS.c
+    if "POUS" not in node.name:
+        return node
+
+# Register callbacks
 env.AddBuildMiddleware(skip_from_build, "*")
+env.AddBuildMiddleware(fix_pous_c)
 
 print("Compiling plc_prog.st ...")
 
